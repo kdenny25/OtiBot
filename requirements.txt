@@ -1,0 +1,19 @@
+# install using - pip install -r requirements.txt
+
+# pandas dataframes
+pandas
+
+# graph library
+dash
+
+# for api calls
+requests
+
+# crypto exchange api
+ccxt
+
+# coinbase pro api
+cbpro
+
+# websockets
+flask-socketio
