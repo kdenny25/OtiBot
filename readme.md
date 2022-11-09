@@ -10,6 +10,9 @@ https://www.digitalocean.com/products/managed-databases-postgresql
 GRID Trading Resources:
 https://phemex.com/academy/what-is-grid-trading
 
+Web interface using Streamlit
+https://streamlit.io/
+
 # Phase 1 - Exchange Communication:
 
 Establish a scalable way to interact with exchange data.

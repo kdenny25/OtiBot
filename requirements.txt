@@ -10,10 +10,16 @@ dash
 requests
 
 # crypto exchange api
-ccxt
+#ccxt
 
 # coinbase pro api
-cbpro
+#cbpro
 
 # websockets
-flask-socketio
+websocket-client
+
+# json reading/writing
+simplejson
+
+# env file reader
+python-dotenv
