@@ -9,6 +9,7 @@ https://www.digitalocean.com/products/managed-databases-postgresql
 
 GRID Trading Resources:
 https://phemex.com/academy/what-is-grid-trading
+https://medium.com/@chris_42047/how-to-implement-a-grid-trading-strategy-python-tutorial-338b38fc5e84
 
 Web interface using Streamlit
 https://streamlit.io/
