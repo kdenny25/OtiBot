@@ -1,6 +1,5 @@
-from cb_config import cb_settings
 from websocket import create_connection
-import asyncio
+
 import simplejson as json
 
 
@@ -10,6 +9,7 @@ class CB_Stream_Data:
         self.url = 'wss://ws-feed.exchange.coinbase.com'
         # default products to list
         self.product_ids = ["ETH-USD"]
+
 
     def stream_data(self):
         # establish a connection to websock server
@@ -28,7 +28,7 @@ class CB_Stream_Data:
             yield data
 
     def bar_data(self):
-        """Generates candlestick data from the ticker stream
+        """Generates 1-min candlestick data from the ticker stream
         What is needed for candle stick data:
         - Date time
         - Open
@@ -36,10 +36,12 @@ class CB_Stream_Data:
         - Low
         - Close
         """
+        columns =['datetime', 'open', 'high', 'low', 'close']
 
 
 s = CB_Stream_Data()
 s.product_ids = ['ETH-USD']
 data = s.stream_data()
+
 for value in data:
     print(value)
