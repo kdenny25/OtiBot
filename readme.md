@@ -14,6 +14,14 @@ https://medium.com/@chris_42047/how-to-implement-a-grid-trading-strategy-python-
 Web interface using Streamlit
 https://streamlit.io/
 
+The web interface changed. We are now using Flask for the interface along
+with Flask-socketio for asynchronous page updates to display realtime data.
+
+https://flask-socketio.readthedocs.io/en/latest/getting_started.html
+
+Binance connector library:
+https://github.com/binance/binance-connector-python
+
 # Phase 1 - Exchange Communication:
 
 Establish a scalable way to interact with exchange data.

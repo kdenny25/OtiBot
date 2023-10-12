@@ -29,3 +29,8 @@ sphinx
 # flask
 flask
 gevent-websocket
+
+# binance connector
+python-binance
+
+matplotlib
