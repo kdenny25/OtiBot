@@ -18,7 +18,7 @@ class binance():
         # test the filepath to make sure it exists
         if os.path.exists(self.import_filepath):
             # Open file
-            f = open(self.import_filepath  , "r")
+            f = open(self.import_filepath, "r")
             # Get information from the file
             project_settings = json.load(f)
             # Close file

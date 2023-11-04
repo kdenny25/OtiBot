@@ -3,14 +3,8 @@
 # pandas dataframes
 pandas
 
-# graph library
-dash
-
 # for api calls
 requests
-
-# crypto exchange api
-#ccxt
 
 flask-socketio
 
@@ -20,9 +14,6 @@ websocket-client
 # json reading/writing
 simplejson
 
-# env file reader
-python-dotenv
-
 # API documentation generator
 sphinx
 
@@ -30,7 +21,8 @@ sphinx
 flask
 gevent-websocket
 
-# binance connector
-python-binance
+# charts
+lightweight-charts
 
-matplotlib
+# database example
+psycopg2

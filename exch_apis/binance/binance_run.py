@@ -1,11 +1,9 @@
-import json
-import os
 import numpy as np
 import matplotlib.pyplot as plt
 import time
 
 from binance_interaction import binance
-from strategies.SMA import Strategy as stg
+from indicators import SMA as stg
 
 client = binance()
 
@@ -33,7 +31,7 @@ def plot_results(data):
     plt.xlabel('Date')
     plt.ylabel('Cumulative Returns')
     plt.title('Backtesting Results')
-    plt.savefig('backtest.png')
+    plt.savefig('backtest_module.png')
     plt.show()
 
 def test_trading():
