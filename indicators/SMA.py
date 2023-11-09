@@ -1,7 +1,7 @@
 # simple moving average (SMA)
 import pandas as pd
 
-def SMA(pd_series, window_size=None):
+def SMA(pd_series: pd.Series, window_size: int) -> pd.Series:
     """
     Calculate the simple moving average of a Pandas series
 
@@ -16,15 +16,17 @@ def SMA(pd_series, window_size=None):
         pandas.Series: values are a series of moving averages
     """
     # create Pandas series of SMA values
-    SMA = pd_series.rolling(window_size).mean()
 
-    return SMA
+    return pd.Series(pd_series).rolling(window_size).mean()
 
 if __name__ == "__main__":
-    arr = [1, 2, 3, 7, 9]
+
+    pd.set_option('display.max_columns', None)
+    filepath = r"../test_data/test_ohlc.csv"
+    test_data = pd.read_csv(filepath)
+
     window_size = 3
 
-    numbers_series = pd.Series(arr)
-    parameters = {'pd_series':numbers_series, 'window_size': 3}
+    parameters = {'pd_series':test_data['close'], 'window_size': 3}
 
     print(SMA(**parameters))

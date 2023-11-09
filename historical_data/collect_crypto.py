@@ -10,16 +10,9 @@ from datetime import datetime as dt
 import sys
 import time
 import math
-from utility.progress_bar import printProgressBar
+from utility import printProgressBar, local_db
 
-conn = psycopg2.connect(
-    host="localhost",
-    database="crypto_data",
-    user="postgres",
-    password="admin",
-    port='5433'
-)
-
+conn = local_db()
 # open a cursor to perform database operations
 cur = conn.cursor()
 
@@ -149,5 +142,6 @@ def load_crypto(symbol='ETHUSD', interval=15, limit=500, startTime=None):
     conn.close()
 
 if __name__ == '__main__':
+    load_crypto(interval=1, startTime='9/1/2019')
     load_crypto(interval=5, startTime='9/1/2019')
     load_crypto(interval=15, startTIme='9/1/2019')

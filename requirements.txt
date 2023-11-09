@@ -26,3 +26,9 @@ lightweight-charts
 
 # database example
 psycopg2
+
+# backtesting library
+backtesting
+
+# machine learning library
+scikit-learn

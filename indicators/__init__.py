@@ -5,3 +5,4 @@ from .EMA import *
 from .MACD import *
 from .RSI import *
 from .SMA import *
+from .Bolinger_Bands import *

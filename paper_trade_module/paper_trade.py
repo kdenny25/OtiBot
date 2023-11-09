@@ -6,7 +6,7 @@ import time
 import asyncio
 import nest_asyncio
 from exch_apis.kraken.kraken_client import client
-from indicators.MACD import MACD
+from indicators import MACD
 nest_asyncio.apply()
 
 

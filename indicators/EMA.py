@@ -38,4 +38,4 @@ if __name__ == '__main__':
     numbers_series = pd.Series(arr)
     parameters = {'pd_series':numbers_series, 'alpha': .5}
 
-    print(EMA(**parameters))
+    print(EMA(**parameters).tail(20))
