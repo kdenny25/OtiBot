@@ -40,3 +40,24 @@ get_crypto_pairs()
 get_candle_sticks()
 get_current_price()
 
+
+# Setup
+
+Install dependencies with `pip install -r requirements.txt`, then copy
+`.env.example` to `.env` and fill in the database password and exchange
+settings. `.env` is ignored by git.
+
+Run the tests from the project root with `python -m pytest`.
+
+# Backtesting
+
+`backtest_module.backtest` runs a long only strategy over candle data. A
+strategy is a function that takes the candle dataframe and returns
+`(buy, sell)` boolean series, like `strategies/sample_strategy.py`.
+
+    bt = backtest(capital=10000)
+    bt.set_fees(0.0026)
+    bt.get_historical_data(15, '7/1/2023', '11/5/2023')  # or bt.set_data(df)
+    bt.set_strategy(my_strategy)
+    bt.run()['stats']          # return, drawdown, sharpe, win rate...
+    bt.run_split_window(4)     # same strategy across 4 back to back periods
