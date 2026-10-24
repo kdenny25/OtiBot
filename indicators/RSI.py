@@ -2,20 +2,31 @@
 import pandas as pd
 
 # Relative Strength Index (RSI)
-# todo: complete docstring and verify
 def RSI(pd_series, window=14, with_wms=True):
     """
+    Calculates the Relative Strength Index of a Pandas Series.
 
     :param
-        pd_series (pandas.Series):
-        window (int):
-        with_wms (bool):
+        pd_series (pandas.Series): Pandas series of closing prices
+
+        window (int): Default 14. Number of periods used to average gains
+                      and losses
+
+        with_wms (bool): Default True. Uses Wilder's smoothing method (the
+                         standard RSI). The first average is a simple mean of
+                         the first `window` changes, every later value is
+                         (previous_avg * (window - 1) + current) / window.
+                         False uses a plain rolling mean (Cutler's RSI).
     :return:
+        pandas.Series: RSI values between 0 and 100. The first `window`
+                       values are NaN, and periods with no price movement at
+                       all (no gains and no losses) are NaN.
     """
 
     delta = pd_series.diff(1)
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
+    # clip keeps the leading NaN so the first average only uses real changes
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
     avg_gain = gain.rolling(window=window, min_periods=window).mean()
     avg_loss = loss.rolling(window=window, min_periods=window).mean()
 

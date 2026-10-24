@@ -1,7 +1,7 @@
 # Exponential Moving Average
 import pandas as pd
 
-def EMA(pd_series, alpha, span=None, rounding=False):
+def EMA(pd_series, alpha=None, span=None, rounding=False):
     """
     Calculates exponential moving average of a Pandas Series
 
@@ -10,7 +10,9 @@ def EMA(pd_series, alpha, span=None, rounding=False):
 
         alpha (float): smoothing factor between 0 and 1
 
-        span (float): specify decay
+        span (float): specify decay in terms of periods. Used instead of
+                      alpha when given (alpha = 2 / (span + 1)). One of
+                      alpha or span is required.
 
         rounding (bool): Default False. Crypto shouldn't use rounding while
                          stocks will round to 2
@@ -18,16 +20,17 @@ def EMA(pd_series, alpha, span=None, rounding=False):
         pandas.Series: values are a series of exponential moving averages
     """
 
-    if span == None:
-        if rounding == False:
-            EMA = pd_series.ewm(alpha=alpha, adjust=False).mean()
-        else:
-            EMA = round(pd_series.ewm(alpha=alpha, adjust=False).mean(), 2)
+    if span is None and alpha is None:
+        raise ValueError('EMA requires either alpha or span')
+
+    # pandas does not allow alpha and span together
+    if span is None:
+        EMA = pd_series.ewm(alpha=alpha, adjust=False).mean()
     else:
-        if rounding == False:
-            EMA = pd_series.ewm(span=span, alpha=alpha, adjust=False).mean()
-        else:
-            EMA = round(pd_series.ewm(span=span, alpha=alpha, adjust=False).mean(), 2)
+        EMA = pd_series.ewm(span=span, adjust=False).mean()
+
+    if rounding == True:
+        EMA = round(EMA, 2)
 
     return EMA
 

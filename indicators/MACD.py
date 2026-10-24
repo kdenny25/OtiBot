@@ -15,10 +15,12 @@ def MACD(pd_series, slow, fast, smooth):
         smooth (int): Common value 9.
 
     :return:
-        pandas dataframe: 3 columns; macd, macd_signal, macd_hist
+        pandas dataframe: 3 columns; macd, macd_signal, macd_hist.
+            Values are NaN until enough periods exist for each EMA to warm
+            up: macd starts at index slow - 1 and macd_signal/macd_hist at
+            index slow + smooth - 2. NaN is used rather than 0 so strategies
+            don't act on incomplete values.
     """
-    #todo: min_periods adds nan values rather than 0's this will have an impact
-    # on results. Double check results.
 
     # calculate fast EMA of closing price
     fast_ema = pd_series.ewm(span=fast, adjust=False, min_periods=fast).mean()
@@ -29,7 +31,7 @@ def MACD(pd_series, slow, fast, smooth):
     macd = fast_ema - slow_ema
 
     # get EMA of the MACD for the Trigger line
-    macd_signal = macd.ewm(span=smooth, adjust=False, min_periods=9).mean()
+    macd_signal = macd.ewm(span=smooth, adjust=False, min_periods=smooth).mean()
 
     # Calculate difference between MACD and Signal for convergence/divergence value
     macd_hist = macd - macd_signal

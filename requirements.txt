@@ -32,3 +32,6 @@ backtesting
 
 # machine learning library
 scikit-learn
+
+# tests
+pytest
