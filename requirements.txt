@@ -30,6 +30,9 @@ lightweight-charts
 # database example
 psycopg2
 
+# stock and ETF data for the dividend screener
+yfinance
+
 # backtesting library
 backtesting
 

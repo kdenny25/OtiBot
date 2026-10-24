@@ -63,3 +63,17 @@ the long and, with `allow_short=True`, goes short.
     bt.set_strategy(my_strategy)
     bt.run()['stats']          # return, drawdown, sharpe, win rate...
     bt.run_split_window(4)     # same strategy across 4 back to back periods
+
+# Dividend screener
+
+Compares dividend stocks and ETFs at `/dividends` in the Flask app. Pick a
+goal (income, growing dividends, stock growth, balanced, low cost or a
+custom mix), then filter by yield, dividend growth, years of increases,
+payout ratio, payout frequency, price growth, total return, volatility,
+ETF expense ratio, size and sector. Enter an amount to invest or a yearly
+income target to see projected dividend income.
+
+Data comes from Yahoo Finance through `yfinance` and is cached in
+`dividend_module/data/dividend_data.json`. Build or update it with the
+Refresh data button or `python -m dividend_module.dividend_data`. The
+tickers are listed in `dividend_module/universe.py`.

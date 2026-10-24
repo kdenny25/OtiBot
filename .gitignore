@@ -8,3 +8,6 @@ __pycache__/
 .pytest_cache/
 venv/
 .venv/
+
+# downloaded market data
+dividend_module/data/
