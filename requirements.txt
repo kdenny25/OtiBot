@@ -11,6 +11,9 @@ flask-socketio
 # websockets
 websocket-client
 
+# .env config
+python-dotenv
+
 # json reading/writing
 simplejson
 

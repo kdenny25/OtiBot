@@ -26,14 +26,16 @@ def get_historical_data(trade_pair, interval, start_date, end_date='NOW', BTPY_f
     if end_date == 'NOW':
         end_date = dt.now().strftime('%m/%d/%Y')
 
-    query = (f"SELECT * FROM crypto_pair "
-             f"WHERE symbol = '{trade_pair}' "
-             f"AND interval = {interval} "
-             f"AND opendatetime BETWEEN '{start_date}' AND '{end_date}'")
-    cur.execute(query)
+    query = ("SELECT * FROM crypto_pair "
+             "WHERE symbol = %s "
+             "AND interval = %s "
+             "AND opendatetime BETWEEN %s AND %s")
+    cur.execute(query, (trade_pair, interval, start_date, end_date))
     results = cur.fetchall()
     col_names = [desc[0] for desc in cur.description]
     data_df = pd.DataFrame(results, columns=col_names)
+    cur.close()
+    conn.close()
 
     if BTPY_format == True:
         data_df['date'] = pd.to_datetime(data_df['opentime'], unit='ms')

@@ -10,6 +10,7 @@ import urllib.request
 import urllib.parse
 import requests
 import datetime
+import math
 
 # Configure API key (copy/paste from account management)
 api_key_public = 'COPY/PASTE API PUBLIC KEY HERE'
@@ -31,7 +32,7 @@ class client():
     client = ""
     def __init__(self) -> None:
         # Variable for the location of settings.json
-        self.import_filepath = r'.../user/credentials.json'
+        self.import_filepath = os.getenv('KRAKEN_CREDENTIALS', 'user/credentials.json')
         self.api_url = "https://api.kraken.com"
         # initialize project settings
         #self.connect()
@@ -69,8 +70,8 @@ class client():
             headers['API-Sign'] = self.get_kraken_signature(uri_path, data, self.api_secret)
             req = requests.post((self.api_url + uri_path), headers=headers, data=data)
             return req
-        except:
-            print('ERROR')
+        except Exception as e:
+            print('ERROR', e)
     #######################################################################################
 
     #######################################################################################
@@ -118,21 +119,26 @@ class client():
             current_date_epoch = int(datetime.datetime(current_date.year, current_date.month,
                                                        current_date.day, current_date.hour, 0).timestamp())
             num_records = ((current_date_epoch-since_epoch)/60)/interval
-            num_requests = round(num_records/720) # rounded up
+            num_requests = math.ceil(num_records/720) # rounded up
             print('Number of expected Records:', num_records)
 
             data_df = pd.DataFrame()
 
             for i in range(num_requests):
                 resp = requests.get(f'https://api.kraken.com/0/public/OHLC?pair={symbol}&interval={interval}'
-                                    f'&since=1696118400')
+                                    f'&since={since_epoch}')
                 api_data = resp.json()
                 symbol_actual = list(api_data['result'].keys())[0]
 
                 temp_df = pd.DataFrame(api_data['result'][symbol_actual], columns=labels)
                 print(temp_df)
-                since_epoch = temp_df['time'].iloc[-1]
+                if temp_df.empty:
+                    break
+                # Kraken returns the id to page from in 'last'
+                since_epoch = api_data['result'].get('last', temp_df['time'].iloc[-1])
                 data_df = pd.concat([data_df, temp_df])
+
+            data_df = data_df.drop_duplicates(subset='time').reset_index(drop=True)
 
         data_df.time = pd.to_datetime(data_df.time, unit='s')
         print(data_df.shape)
@@ -146,5 +152,5 @@ class client():
 
 if __name__ == '__main__':
     client = client()
-    client.set_api_creds(r'C:\Users\kdenn\PycharmProjects\Crypto_Charts\user\credentials.json')
+    client.set_api_creds(client.import_filepath)
     print(client.get_historical_data(since='09/10/2023'))
