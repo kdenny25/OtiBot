@@ -11,6 +11,9 @@ flask-socketio
 # websockets
 websocket-client
 
+# .env config
+python-dotenv
+
 # json reading/writing
 simplejson
 
@@ -27,8 +30,14 @@ lightweight-charts
 # database example
 psycopg2
 
+# stock and ETF data for the dividend screener
+yfinance
+
 # backtesting library
 backtesting
 
 # machine learning library
 scikit-learn
+
+# tests
+pytest

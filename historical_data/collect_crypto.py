@@ -12,10 +12,6 @@ import time
 import math
 from utility import printProgressBar, local_db
 
-conn = local_db()
-# open a cursor to perform database operations
-cur = conn.cursor()
-
 def _check_api_weight_limit(response):
     """
     Check if weight limit is exceeded
@@ -55,19 +51,22 @@ def get_crypto(symbol='ETHUSD', interval=15, limit=500, startTime=None, endTime=
     _check_api_weight_limit(resp)
     return data_df
 
-def get_last_enrty(symbol, interval):
+def get_last_entry(cur, symbol, interval):
     """
     Returns epoch datetime of last database entry of specified symbol
 
     :param:
+    cur: open database cursor
     symbol (str): Trading pair of symbol.
+    interval (int): interval in minutes
 
     :return:
     int: Epoch in ms or None if not entries exist
     """
-    cur.execute(f"SELECT MAX(opentime) "
-                        f"FROM crypto_pair "
-                        f"WHERE symbol = '{symbol}' AND interval = {interval}")
+    cur.execute("SELECT MAX(opentime) "
+                "FROM crypto_pair "
+                "WHERE symbol = %s AND interval = %s",
+                (symbol, interval))
 
     result = cur.fetchall()[0][0] # automatically returns None if empty
 
@@ -87,8 +86,12 @@ def load_crypto(symbol='ETHUSD', interval=15, limit=500, startTime=None):
     startTime_temp = dt.strptime(startTime, '%m/%d/%Y')
     start_date_epoch = int(dt(startTime_temp.year, startTime_temp.month, startTime_temp.day, 0, 0).timestamp())*1000
 
+    # open a cursor to perform database operations
+    conn = local_db()
+    cur = conn.cursor()
+
     # check if entries already exist and fill remaining
-    last_entry = get_last_enrty(symbol, interval)
+    last_entry = get_last_entry(cur, symbol, interval)
 
     if last_entry != None:
         if last_entry >= start_date_epoch:
@@ -144,4 +147,4 @@ def load_crypto(symbol='ETHUSD', interval=15, limit=500, startTime=None):
 if __name__ == '__main__':
     load_crypto(interval=1, startTime='9/1/2019')
     load_crypto(interval=5, startTime='9/1/2019')
-    load_crypto(interval=15, startTIme='9/1/2019')
+    load_crypto(interval=15, startTime='9/1/2019')

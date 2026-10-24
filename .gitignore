@@ -1,0 +1,13 @@
+# secrets
+.env
+user/credentials.json
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+
+# downloaded market data
+dividend_module/data/

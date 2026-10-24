@@ -13,10 +13,7 @@ class coinbase:
         response = requests.get(url).json()
 
         # extracts the pair names
-        for i in range(len(response)):
-            data = response[i]['id']
-
-        return data
+        return [pair['id'] for pair in response]
 
     # Coinbase only allows 300 candles per request
     def get_historic_candles(self, crypto_pair, granularity, start, end):

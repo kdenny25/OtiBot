@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OtiBot Dividend Screener</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #12151c; }
+        .filters { max-height: calc(100vh - 90px); overflow-y: auto; }
+        .filters .form-label { font-size: .8rem; margin-bottom: .15rem; color: #aab; }
+        .filters .section { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
+                            color: #789; margin: 1rem 0 .4rem; }
+        table th { cursor: pointer; white-space: nowrap; font-size: .8rem; }
+        table th.sorted::after { content: attr(data-dir); padding-left: 4px; }
+        table td { font-size: .85rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .score-bar { height: 6px; background: #2a2f3a; border-radius: 3px; width: 60px; display: inline-block; }
+        .score-bar span { display: block; height: 100%; border-radius: 3px; background: #3fb68b; }
+        .neg { color: #e5697b; }
+        .pos { color: #3fb68b; }
+        .muted { color: #667; }
+    </style>
+</head>
+<body>
+<nav class="navbar border-bottom border-secondary-subtle px-3">
+    <span class="navbar-brand">Dividend Screener</span>
+    <div class="d-flex align-items-center gap-3">
+        <small class="text-secondary" id="updated"></small>
+        <button class="btn btn-sm btn-outline-success" id="refresh">Refresh data</button>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- filters -->
+        <form class="col-lg-3 col-xl-2 filters py-3 border-end border-secondary-subtle" id="filters">
+            <div class="section mt-0">Goal</div>
+            <select class="form-select form-select-sm" name="goal">
+                {% for key, goal in goals.items() %}
+                <option value="{{ key }}" {% if key == 'balanced' %}selected{% endif %}>{{ goal.label }}</option>
+                {% endfor %}
+                <option value="custom">Custom mix</option>
+            </select>
+            <div id="custom-mix" class="mt-2 d-none">
+                <label class="form-label d-flex justify-content-between">
+                    <span>Stock growth</span><span>Dividends</span>
+                </label>
+                <input type="range" class="form-range" name="dividend_weight" min="0" max="1" step="0.05" value="0.5">
+            </div>
+
+            <div class="section">Your targets</div>
+            <label class="form-label">Amount to invest ($)</label>
+            <input class="form-control form-control-sm" name="invest_amount" type="number" min="0" step="1000" placeholder="10000">
+            <label class="form-label mt-2">Yearly income target ($)</label>
+            <input class="form-control form-control-sm" name="target_income" type="number" min="0" step="100" placeholder="5000">
+
+            <div class="section">Type</div>
+            <div class="btn-group btn-group-sm w-100" role="group">
+                <input type="radio" class="btn-check" name="type" value="" id="type-all" checked>
+                <label class="btn btn-outline-secondary" for="type-all">All</label>
+                <input type="radio" class="btn-check" name="type" value="Stock" id="type-stock">
+                <label class="btn btn-outline-secondary" for="type-stock">Stocks</label>
+                <input type="radio" class="btn-check" name="type" value="ETF" id="type-etf">
+                <label class="btn btn-outline-secondary" for="type-etf">ETFs</label>
+            </div>
+            <input class="form-control form-control-sm mt-2" name="search" placeholder="Search symbol or name">
+
+            <div class="section">Dividend</div>
+            <div class="row g-2">
+                <div class="col"><label class="form-label">Min yield %</label>
+                    <input class="form-control form-control-sm" name="min_yield" data-pct type="number" step="0.1"></div>
+                <div class="col"><label class="form-label">Max yield %</label>
+                    <input class="form-control form-control-sm" name="max_yield" data-pct type="number" step="0.1"></div>
+            </div>
+            <label class="form-label mt-2">Min 5y dividend growth %/yr</label>
+            <input class="form-control form-control-sm" name="min_dividend_growth" data-pct type="number" step="0.5">
+            <label class="form-label mt-2">Min years of dividend increases</label>
+            <input class="form-control form-control-sm" name="min_years_of_increases" type="number" min="0" step="1">
+            <label class="form-label mt-2">Max payout ratio % (stocks)</label>
+            <input class="form-control form-control-sm" name="max_payout_ratio" data-pct type="number" step="5">
+            <label class="form-label mt-2">Payout frequency</label>
+            <div>
+                {% for freq in ['Monthly', 'Quarterly', 'Semi-Annual', 'Annual'] %}
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" name="frequency" value="{{ freq }}" id="f-{{ freq }}">
+                    <label class="form-check-label small" for="f-{{ freq }}">{{ freq }}</label>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="section">Growth and risk</div>
+            <label class="form-label">Min 5y price growth %/yr</label>
+            <input class="form-control form-control-sm" name="min_price_growth" data-pct type="number" step="0.5">
+            <label class="form-label mt-2">Min 5y total return %/yr</label>
+            <input class="form-control form-control-sm" name="min_total_return" data-pct type="number" step="0.5">
+            <label class="form-label mt-2">Max volatility %</label>
+            <input class="form-control form-control-sm" name="max_volatility" data-pct type="number" step="1">
+
+            <div class="section">Fees and size</div>
+            <label class="form-label">Max ETF expense ratio %</label>
+            <input class="form-control form-control-sm" name="max_expense_ratio" data-pct type="number" step="0.01">
+            <label class="form-label mt-2">Min market cap / AUM ($B)</label>
+            <input class="form-control form-control-sm" name="min_size" data-billions type="number" step="1">
+
+            <div class="section">Sector / category</div>
+            <select class="form-select form-select-sm" name="sector" multiple size="6" id="sectors"></select>
+            <button type="button" class="btn btn-sm btn-link px-0" id="reset">Reset filters</button>
+        </form>
+
+        <!-- results -->
+        <main class="col-lg-9 col-xl-10 py-3">
+            <div class="d-flex justify-content-between align-items-baseline mb-2">
+                <div id="count" class="text-secondary small"></div>
+                <div class="text-secondary small">Score ranks matches against your goal within the filtered list. Click a column to sort.</div>
+            </div>
+            <div id="empty" class="alert alert-secondary d-none"></div>
+            <div class="table-responsive">
+                <table class="table table-dark table-hover table-sm align-middle">
+                    <thead><tr id="head"></tr></thead>
+                    <tbody id="rows"></tbody>
+                </table>
+            </div>
+            <p class="text-secondary small mt-3">
+                Data from Yahoo Finance, which can be delayed or incomplete. Yield is the trailing 12 month
+                dividend over price. Growth rates are annualized. Total return includes reinvested dividends.
+                Projected income assumes the 5 year dividend growth rate continues. Not investment advice.
+            </p>
+        </main>
+    </div>
+</div>
+
+<script>
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const pct = v => v == null ? '<span class="muted">–</span>' : `<span class="${v < 0 ? 'neg' : ''}">${(v * 100).toFixed(2)}%</span>`;
+const money = v => v == null ? '<span class="muted">–</span>' : '$' + Math.round(v).toLocaleString();
+const num = (v, d = 2) => v == null ? '<span class="muted">–</span>' : Number(v).toFixed(d);
+const size = v => {
+    if (v == null) return '<span class="muted">–</span>';
+    return v >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`;
+};
+const score = v => `<span class="score-bar"><span style="width:${v}%"></span></span> ${num(v, 0)}`;
+
+// key, label, formatter, tooltip, only shown when the value exists
+const COLUMNS = [
+    ['score', 'Score', score, 'How well it matches your goal, 0-100'],
+    ['symbol', 'Symbol', v => `<strong>${esc(v)}</strong>`],
+    ['name', 'Name', v => `<span title="${esc(v)}">${esc(v.length > 28 ? v.slice(0, 27) + '…' : v)}</span>`],
+    ['type', 'Type', v => v],
+    ['sector', 'Sector / Category', v => v ? esc(v) : '<span class="muted">–</span>'],
+    ['price', 'Price', v => v == null ? '–' : '$' + num(v)],
+    ['dividend_yield', 'Yield', pct, 'Trailing 12 month dividend / price'],
+    ['annual_dividend', 'Div/Share', v => v == null ? '–' : '$' + num(v)],
+    ['annual_income', 'Yearly Income', money, 'Dividend income for the amount you invest', true],
+    ['income_10y', 'Income in 10y', money, 'Yearly income in 10 years if dividend growth continues', true],
+    ['amount_needed', 'Needed for Target', money, 'Amount to invest to reach your yearly income target', true],
+    ['dividend_growth_5y', 'Div Growth 5y', pct, 'Yearly dividend growth over 5 years'],
+    ['dividend_growth_10y', 'Div Growth 10y', pct],
+    ['years_of_increases', 'Yrs Raised', v => num(v, 0), 'Consecutive years the dividend increased'],
+    ['payout_frequency', 'Frequency', v => v],
+    ['payout_ratio', 'Payout Ratio', pct, 'Share of earnings paid as dividends (stocks)'],
+    ['expense_ratio', 'Expense Ratio', pct, 'Yearly ETF fee'],
+    ['price_growth_1y', 'Price 1y', pct],
+    ['price_growth_5y', 'Price 5y/yr', pct, 'Annualized price growth, excluding dividends'],
+    ['total_return_5y', 'Total Ret 5y/yr', pct, 'Annualized return with dividends reinvested'],
+    ['total_return_10y', 'Total Ret 10y/yr', pct],
+    ['volatility', 'Volatility', pct, 'Annualized volatility, last 3 years'],
+    ['max_drawdown_5y', 'Max DD 5y', pct, 'Largest drop from a peak in 5 years'],
+    ['beta', 'Beta', v => num(v)],
+    ['pe_ratio', 'P/E', v => num(v, 1)],
+    ['size', 'Mkt Cap / AUM', size],
+    ['ex_dividend_date', 'Ex-Div', v => v || '–', 'Most recent ex-dividend date'],
+];
+
+let rows = [];
+let sortKey = null, sortAsc = false;
+const form = document.getElementById('filters');
+
+function params() {
+    const p = new URLSearchParams();
+    for (const el of form.elements) {
+        if (!el.name || el.value === '') continue;
+        if ((el.type === 'radio' || el.type === 'checkbox') && !el.checked) continue;
+        if (el.name === 'dividend_weight' && form.goal.value !== 'custom') continue;
+        if (el.multiple) {
+            [...el.selectedOptions].forEach(o => p.append(el.name, o.value));
+            continue;
+        }
+        let v = el.value;
+        if (el.hasAttribute('data-pct')) v = Number(v) / 100;
+        if (el.hasAttribute('data-billions')) v = Number(v) * 1e9;
+        p.append(el.name, v);
+    }
+    return p;
+}
+
+function render() {
+    const shown = COLUMNS.filter(c => !c[4] || rows.some(r => r[c[0]] != null));
+    document.getElementById('head').innerHTML = shown.map(([k, label, , tip]) =>
+        `<th data-key="${k}" title="${tip || ''}" class="${k === sortKey ? 'sorted' : ''}" data-dir="${sortAsc ? '▲' : '▼'}">${label}</th>`).join('');
+
+    let sorted = rows;
+    if (sortKey) {
+        sorted = [...rows].sort((a, b) => {
+            const x = a[sortKey], y = b[sortKey];
+            if (x == null) return 1;
+            if (y == null) return -1;
+            return (x > y ? 1 : x < y ? -1 : 0) * (sortAsc ? 1 : -1);
+        });
+    }
+    document.getElementById('rows').innerHTML = sorted.map(r =>
+        '<tr>' + shown.map(([k, , fmt]) => `<td>${fmt(r[k])}</td>`).join('') + '</tr>').join('');
+}
+
+let pending;
+async function load() {
+    const res = await fetch('/api/dividends?' + params());
+    const data = await res.json();
+    rows = data.results;
+
+    document.getElementById('updated').textContent =
+        data.refreshing ? 'Refreshing data…' : data.updated ? `Updated ${data.updated}` : '';
+    document.getElementById('count').textContent = `${rows.length} of ${data.total} match`;
+
+    const sel = document.getElementById('sectors');
+    const chosen = new Set([...sel.selectedOptions].map(o => o.value));
+    sel.innerHTML = data.sectors.map(s => `<option ${chosen.has(s) ? 'selected' : ''}>${esc(s)}</option>`).join('');
+
+    const empty = document.getElementById('empty');
+    empty.classList.toggle('d-none', rows.length > 0);
+    empty.innerHTML = data.total === 0
+        ? 'No data yet. Click <b>Refresh data</b> or run <code>python -m dividend_module.dividend_data</code>. Downloading takes a few minutes.'
+        : 'Nothing matches these filters. Try loosening them.';
+    if (data.refresh_error) empty.innerHTML += `<br>Last refresh failed: ${esc(data.refresh_error)}`;
+
+    render();
+    clearTimeout(pending);
+    if (data.refreshing) pending = setTimeout(load, 5000);
+}
+
+form.addEventListener('input', () => {
+    document.getElementById('custom-mix').classList.toggle('d-none', form.goal.value !== 'custom');
+    clearTimeout(pending);
+    pending = setTimeout(load, 250);
+});
+form.addEventListener('submit', e => e.preventDefault());
+document.getElementById('reset').onclick = () => { form.reset(); sortKey = null; form.dispatchEvent(new Event('input')); };
+document.getElementById('head').addEventListener('click', e => {
+    const key = e.target.closest('th')?.dataset.key;
+    if (!key) return;
+    sortAsc = key === sortKey ? !sortAsc : false;
+    sortKey = key;
+    render();
+});
+document.getElementById('refresh').onclick = async () => {
+    await fetch('/api/dividends/refresh', {method: 'POST'});
+    load();
+};
+load();
+</script>
+</body>
+</html>

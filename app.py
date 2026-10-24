@@ -6,6 +6,7 @@ from flask import Flask, render_template, session
 from flask_socketio import SocketIO, emit
 import requests
 import os
+from dividend_module.routes import dividends_bp
 
 # Set this variable to "threading", "eventlet" or "gevent" to test the
 # different async modes, or leave it set to None for the application to choose
@@ -17,6 +18,8 @@ base_dir = '.'
 app = Flask(__name__,
             static_folder=os.path.join(base_dir, 'static'),
             template_folder=os.path.join(base_dir, 'templates'),)
+
+app.register_blueprint(dividends_bp)
 
 socketio = SocketIO(app, async_mode=async_mode)
 thread = None

@@ -1,17 +1,9 @@
-import psycopg2
-
-conn = psycopg2.connect(
-    host="localhost",
-    database="crypto_data",
-    user="postgres",
-    password="admin",
-    port='5433'
-)
-
-# open a cursor to perform database operations
-cur = conn.cursor()
+from utility import local_db
 
 def create_crypto_table():
+    conn = local_db()
+    # open a cursor to perform database operations
+    cur = conn.cursor()
     table_name = 'crypto_pair'
 
     # execute a command: this creates a new table
