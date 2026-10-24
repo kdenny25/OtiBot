@@ -51,12 +51,14 @@ Run the tests from the project root with `python -m pytest`.
 
 # Backtesting
 
-`backtest_module.backtest` runs a long only strategy over candle data. A
-strategy is a function that takes the candle dataframe and returns
-`(buy, sell)` boolean series, like `strategies/sample_strategy.py`.
+`backtest_module.backtest` runs a strategy over candle data. A strategy is
+a function that takes the candle dataframe and returns `(buy, sell)` boolean
+series, like `strategies/sample_strategy.py`. A buy goes long, a sell exits
+the long and, with `allow_short=True`, goes short.
 
-    bt = backtest(capital=10000)
+    bt = backtest(capital=10000, allow_short=True)
     bt.set_fees(0.0026)
+    bt.set_slippage(0.0005)    # fills 0.05% worse than the open
     bt.get_historical_data(15, '7/1/2023', '11/5/2023')  # or bt.set_data(df)
     bt.set_strategy(my_strategy)
     bt.run()['stats']          # return, drawdown, sharpe, win rate...

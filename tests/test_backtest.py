@@ -95,3 +95,63 @@ def test_evaluations():
     assert stats['win_rate'] == pytest.approx(2 / 3)
     assert stats['profit_factor'] == pytest.approx(5)
     assert evaluations.trade_stats(pd.DataFrame({'pnl': []}))['num_trades'] == 0
+
+
+def test_short_profits_when_price_falls():
+    bt = backtest(capital=1000, allow_short=True)
+    bt.set_fees(0.01)
+    bt.set_data(candles([100, 100, 50, 50]))
+    bt.set_strategy(signal_at([], [0]))
+    result = bt.run()
+
+    # short at 100 with 990 after the fee, cover at 50 paying the fee on the buy
+    units = 990 / 100
+    final = 990 + units * (100 - 50) - units * 50 * 0.01
+    trade = result['trades'].iloc[0]
+    assert trade['side'] == 'short'
+    assert result['stats']['final_equity'] == pytest.approx(final)
+    # marked to market while open: price 100 -> 50 at index 2
+    assert result['equity'].iloc[2] == pytest.approx(990 + units * 50)
+
+
+def test_sell_without_shorts_only_exits():
+    bt = backtest(capital=100)
+    bt.set_data(candles([10, 10, 5, 5]))
+    bt.set_strategy(signal_at([], [0]))
+    result = bt.run()
+    assert result['trades'].empty
+    assert result['equity'].eq(100).all()
+
+
+def test_signals_flip_long_to_short():
+    bt = backtest(capital=100, allow_short=True)
+    bt.set_data(candles([10, 10, 20, 20, 10, 10]))
+    bt.set_strategy(signal_at([0], [2]))
+    result = bt.run()
+    trades = result['trades']
+    assert trades['side'].tolist() == ['long', 'short']
+    # long 10 -> 20 doubles to 200, short at 20 -> 10 adds 10 units * 10
+    assert result['stats']['final_equity'] == pytest.approx(300)
+
+
+def test_slippage_moves_fills_against_the_trade():
+    bt = backtest(capital=1000, slippage=0.01)
+    bt.set_data(candles([100, 100, 100]))
+    bt.set_strategy(signal_at([0], [1]))
+    result = bt.run()
+    # buy at 101, sell at 99
+    assert result['stats']['final_equity'] == pytest.approx(1000 / 101 * 99)
+
+    bt.set_allow_short(True)
+    bt.set_strategy(signal_at([], [0]))
+    result = bt.run()
+    # short at 99, cover at 101 on the last close
+    units = 1000 / 99
+    assert result['stats']['final_equity'] == pytest.approx(1000 + units * (99 - 101))
+
+
+def test_conflicting_signals_ignored():
+    bt = backtest(capital=100, allow_short=True)
+    bt.set_data(candles([1, 2, 3]))
+    bt.set_strategy(signal_at([0], [0]))
+    assert bt.run()['trades'].empty

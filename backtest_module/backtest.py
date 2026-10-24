@@ -5,18 +5,25 @@ import pandas as pd
 
 class backtest(object):
     """
-        Long only backtester. A strategy is a function that takes the price
-        dataframe and returns two boolean series (buy, sell), the same
-        format as strategies/sample_strategy.py.
+        Backtester for long and (optionally) short strategies. A strategy is
+        a function that takes the price dataframe and returns two boolean
+        series (buy, sell), the same format as strategies/sample_strategy.py.
+
+        A buy signal closes any short and goes long. A sell signal closes
+        any long and, when allow_short is True, goes short. A candle with
+        both signals is ignored.
 
         Signals are calculated on the close of a candle and filled at the
         open of the next candle so results don't use future prices.
-        Every fill pays the taker fee.
+        Every fill pays the taker fee and slippage: buys fill slippage
+        above the price and sells fill slippage below it.
     """
 
-    def __init__(self, client=None, capital=10000):
+    def __init__(self, client=None, capital=10000, allow_short=False, slippage=0.0):
         self.client = client
         self.capital = capital
+        self.allow_short = allow_short
+        self.slippage = slippage
         self.trade_pair = 'ETHUSD'
         self.taker_fees = 0.0
         self.maker_fees = 0.0
@@ -88,19 +95,56 @@ class backtest(object):
         self.taker_fees = taker
         self.maker_fees = taker if maker is None else maker
 
+    # set slippage
+    def set_slippage(self, slippage):
+        """
+        :param:
+            slippage (float): price impact per fill as a fraction, 0.0005 is
+                              0.05%
+        """
+        self.slippage = slippage
+
+    # allow short positions
+    def set_allow_short(self, allow_short=True):
+        self.allow_short = allow_short
+
     # set strategy
     def set_strategy(self, strategy):
         self.strategy = strategy
 
+    def buy_price(self, price):
+        """ Fill price for a buy after slippage. """
+        return price * (1 + self.slippage)
+
+    def sell_price(self, price):
+        """ Fill price for a sell after slippage. """
+        return price * (1 - self.slippage)
+
     # buy
     def buy(self, cash, price):
         """ Spends all cash at price. Returns units bought. """
-        return cash * (1 - self.taker_fees) / price
+        return cash * (1 - self.taker_fees) / self.buy_price(price)
 
     # sell
     def sell(self, units, price):
         """ Sells all units at price. Returns cash received. """
-        return units * price * (1 - self.taker_fees)
+        return units * self.sell_price(price) * (1 - self.taker_fees)
+
+    # short
+    def short(self, cash, price):
+        """
+        Opens a short worth all cash at price. The fee is paid from cash.
+        Returns (units shorted, fill price, cash left after the fee).
+        """
+        cash = cash * (1 - self.taker_fees)
+        fill = self.sell_price(price)
+        return cash / fill, fill, cash
+
+    # cover
+    def cover(self, units, entry_fill, cash, price):
+        """ Buys back a short at price. Returns cash after profit/loss and fee. """
+        fill = self.buy_price(price)
+        return cash + units * (entry_fill - fill) - units * fill * self.taker_fees
 
     # run backtest
     def run(self, data=None):
@@ -126,33 +170,59 @@ class backtest(object):
         closes = data['close'].to_numpy()
 
         cash = self.capital
+        position = 0      # 1 long, -1 short, 0 flat
         units = 0.0
         entry = None
         trades = []
         equity = []
 
+        def close_position(i, price):
+            nonlocal cash, position, units
+            if position == 1:
+                cash = self.sell(units, price)
+            else:
+                cash = self.cover(units, entry['entry_fill'], cash, price)
+            trades.append(self._close_trade(entry, i, price, cash))
+            position, units = 0, 0.0
+
+        def open_position(i, side, price):
+            nonlocal cash, position, units, entry
+            entry = {'side': 'long' if side == 1 else 'short', 'entry_index': i,
+                     'entry_price': price, 'entry_cash': cash}
+            if side == 1:
+                units = self.buy(cash, price)
+                cash = 0.0
+            else:
+                units, entry['entry_fill'], cash = self.short(cash, price)
+            position = side
+
         for i in range(len(data)):
             # fill signals from the previous candle at this candle's open
-            if i > 0:
-                if units == 0 and buy_signal[i - 1]:
-                    entry = {'entry_index': i, 'entry_price': opens[i], 'entry_cash': cash}
-                    units = self.buy(cash, opens[i])
-                    cash = 0.0
-                elif units > 0 and sell_signal[i - 1]:
-                    cash = self.sell(units, opens[i])
-                    units = 0.0
-                    trades.append(self._close_trade(entry, i, opens[i], cash))
+            if i > 0 and buy_signal[i - 1] != sell_signal[i - 1]:
+                if buy_signal[i - 1] and position != 1:
+                    if position == -1:
+                        close_position(i, opens[i])
+                    open_position(i, 1, opens[i])
+                elif sell_signal[i - 1] and position != -1:
+                    if position == 1:
+                        close_position(i, opens[i])
+                    if self.allow_short:
+                        open_position(i, -1, opens[i])
 
-            equity.append(cash + units * closes[i])
+            if position == 1:
+                equity.append(units * closes[i])
+            elif position == -1:
+                equity.append(cash + units * (entry['entry_fill'] - closes[i]))
+            else:
+                equity.append(cash)
 
         # close any open position at the final close
-        if units > 0:
-            cash = self.sell(units, closes[-1])
-            trades.append(self._close_trade(entry, len(data) - 1, closes[-1], cash))
+        if position != 0:
+            close_position(len(data) - 1, closes[-1])
             equity[-1] = cash
 
         equity = pd.Series(equity, index=data.index, name='equity')
-        trades = pd.DataFrame(trades, columns=['entry_index', 'entry_price', 'exit_index',
+        trades = pd.DataFrame(trades, columns=['side', 'entry_index', 'entry_price', 'exit_index',
                                                'exit_price', 'pnl', 'return'])
         return {'stats': evaluate(equity, trades, self.periods_per_year),
                 'equity': equity,
@@ -161,7 +231,7 @@ class backtest(object):
     @staticmethod
     def _close_trade(entry, exit_index, exit_price, cash):
         pnl = cash - entry['entry_cash']
-        return {'entry_index': entry['entry_index'], 'entry_price': entry['entry_price'],
+        return {'side': entry['side'], 'entry_index': entry['entry_index'], 'entry_price': entry['entry_price'],
                 'exit_index': exit_index, 'exit_price': exit_price,
                 'pnl': pnl, 'return': pnl / entry['entry_cash']}
 
@@ -199,7 +269,7 @@ if __name__ == '__main__':
         sell = (df['SMA'] < df['SMA'].shift(1)) | (df['RSI'] > 70)
         return buy, sell
 
-    bt = backtest(client())
+    bt = backtest(client(), allow_short=True, slippage=0.0005)
     bt.set_tradable_pair('ETHUSD')
     bt.get_historical_data(15, '7/1/2023', '11/5/2023')
     bt.set_strategy(sma_rsi)
