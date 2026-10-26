@@ -7,6 +7,7 @@ from flask_socketio import SocketIO, emit
 import requests
 import os
 from dividend_module.routes import dividends_bp
+from agent_module.routes import init_agents
 
 # Set this variable to "threading", "eventlet" or "gevent" to test the
 # different async modes, or leave it set to None for the application to choose
@@ -22,6 +23,7 @@ app = Flask(__name__,
 app.register_blueprint(dividends_bp)
 
 socketio = SocketIO(app, async_mode=async_mode)
+init_agents(app, socketio)
 thread = None
 thread_lock = Lock()
 
