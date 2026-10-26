@@ -104,3 +104,24 @@ off. Reset clears them.
 The dashboard shows average win, average loss, profit factor and drawdown
 next to the win rate, because win rate alone says nothing about whether the
 system makes money.
+
+# Web app
+
+Run `python app.py` and open http://localhost:5000. Every page shares a
+sidebar and a light or dark theme (the switch is at the bottom of the
+sidebar and your choice is remembered).
+
+- **Overview** (`/`) shows live BTC, ETH, SOL and XRP prices from Kraken,
+  the agents' paper balance and stats, the last backtest you ran and the
+  top dividend picks.
+- **Agents** (`/agents`) is the paper trading dashboard described above.
+- **Backtest** (`/backtest`) runs a built in strategy from the browser and
+  charts it against buying and holding, with every trade and a check of how
+  it did across back to back periods. Candles come from the Postgres
+  database, the latest 720 from Kraken, or an offline sample. Strategies live
+  in `backtest_module/strategies.py`; add one to `STRATEGIES` and it shows up
+  on the page with its parameters.
+- **Dividends** (`/dividends`) is the dividend screener.
+
+Shared styles and helpers are in `static/css/otibot.css` and
+`static/js/otibot.js`.

@@ -44,7 +44,8 @@ class KrakenMarket:
         :param:
             pairs (list): Kraken pair keys
         :return:
-            dict: pair key to {'bid', 'ask', 'last', 'quote_volume'}
+            dict: pair key to {'bid', 'ask', 'last', 'open', 'quote_volume'}
+                  where open is today's opening price (UTC)
         """
         result = {}
         pairs = list(pairs)
@@ -56,6 +57,7 @@ class KrakenMarket:
                 result[key] = {'bid': float(t['b'][0]),
                                'ask': float(t['a'][0]),
                                'last': last,
+                               'open': float(t['o']) if 'o' in t else None,
                                'quote_volume': float(t['v'][1]) * vwap}
         return result
 

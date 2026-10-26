@@ -1,40 +1,31 @@
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>OtiBot Dividend Screener</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background: #12151c; }
-        .filters { max-height: calc(100vh - 90px); overflow-y: auto; }
-        .filters .form-label { font-size: .8rem; margin-bottom: .15rem; color: #aab; }
-        .filters .section { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
-                            color: #789; margin: 1rem 0 .4rem; }
-        table th { cursor: pointer; white-space: nowrap; font-size: .8rem; }
-        table th.sorted::after { content: attr(data-dir); padding-left: 4px; }
-        table td { font-size: .85rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
-        .score-bar { height: 6px; background: #2a2f3a; border-radius: 3px; width: 60px; display: inline-block; }
-        .score-bar span { display: block; height: 100%; border-radius: 3px; background: #3fb68b; }
-        .neg { color: #e5697b; }
-        .pos { color: #3fb68b; }
-        .muted { color: #667; }
-    </style>
-</head>
-<body>
-<nav class="navbar border-bottom border-secondary-subtle px-3">
-    <span class="navbar-brand">Dividend Screener</span>
-    <div class="d-flex align-items-center gap-3">
-        <small class="text-secondary" id="updated"></small>
-        <button class="btn btn-sm btn-outline-success" id="refresh">Refresh data</button>
-    </div>
-</nav>
+{% extends "layout.html" %}
+{% block title %}Dividends{% endblock %}
+{% block page_title %}Dividend screener{% endblock %}
+{% block page_sub %}Compare dividend stocks and ETFs against your goal and see the income they'd pay.{% endblock %}
+{% block actions %}
+<small class="text-2 me-2" id="updated"></small>
+<button class="btn btn-ghost" id="refresh"><i class="bi bi-arrow-repeat me-1"></i> Refresh data</button>
+{% endblock %}
 
-<div class="container-fluid">
-    <div class="row">
-        <!-- filters -->
-        <form class="col-lg-3 col-xl-2 filters py-3 border-end border-secondary-subtle" id="filters">
-            <div class="section mt-0">Goal</div>
+{% block styles %}
+<style>
+    @media (min-width: 992px) {
+        .filters { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto; }
+    }
+    .filters .form-label { font-size: .78rem; }
+    #sectors { min-height: 130px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-4 col-xl-3">
+        <button class="btn btn-ghost w-100 d-lg-none mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#filter-wrap">
+            <i class="bi bi-funnel me-1"></i> Goal and filters
+        </button>
+        <div class="collapse d-lg-block" id="filter-wrap">
+        <form class="o-card filters" id="filters">
+            <div class="o-section mt-0">Goal</div>
             <select class="form-select form-select-sm" name="goal">
                 {% for key, goal in goals.items() %}
                 <option value="{{ key }}" {% if key == 'balanced' %}selected{% endif %}>{{ goal.label }}</option>
@@ -48,24 +39,24 @@
                 <input type="range" class="form-range" name="dividend_weight" min="0" max="1" step="0.05" value="0.5">
             </div>
 
-            <div class="section">Your targets</div>
+            <div class="o-section">Your targets</div>
             <label class="form-label">Amount to invest ($)</label>
             <input class="form-control form-control-sm" name="invest_amount" type="number" min="0" step="1000" placeholder="10000">
             <label class="form-label mt-2">Yearly income target ($)</label>
             <input class="form-control form-control-sm" name="target_income" type="number" min="0" step="100" placeholder="5000">
 
-            <div class="section">Type</div>
+            <div class="o-section">Type</div>
             <div class="btn-group btn-group-sm w-100" role="group">
                 <input type="radio" class="btn-check" name="type" value="" id="type-all" checked>
-                <label class="btn btn-outline-secondary" for="type-all">All</label>
+                <label class="btn btn-seg" for="type-all">All</label>
                 <input type="radio" class="btn-check" name="type" value="Stock" id="type-stock">
-                <label class="btn btn-outline-secondary" for="type-stock">Stocks</label>
+                <label class="btn btn-seg" for="type-stock">Stocks</label>
                 <input type="radio" class="btn-check" name="type" value="ETF" id="type-etf">
-                <label class="btn btn-outline-secondary" for="type-etf">ETFs</label>
+                <label class="btn btn-seg" for="type-etf">ETFs</label>
             </div>
             <input class="form-control form-control-sm mt-2" name="search" placeholder="Search symbol or name">
 
-            <div class="section">Dividend</div>
+            <div class="o-section">Dividend</div>
             <div class="row g-2">
                 <div class="col"><label class="form-label">Min yield %</label>
                     <input class="form-control form-control-sm" name="min_yield" data-pct type="number" step="0.1"></div>
@@ -88,7 +79,7 @@
                 {% endfor %}
             </div>
 
-            <div class="section">Growth and risk</div>
+            <div class="o-section">Growth and risk</div>
             <label class="form-label">Min 5y price growth %/yr</label>
             <input class="form-control form-control-sm" name="min_price_growth" data-pct type="number" step="0.5">
             <label class="form-label mt-2">Min 5y total return %/yr</label>
@@ -96,39 +87,43 @@
             <label class="form-label mt-2">Max volatility %</label>
             <input class="form-control form-control-sm" name="max_volatility" data-pct type="number" step="1">
 
-            <div class="section">Fees and size</div>
+            <div class="o-section">Fees and size</div>
             <label class="form-label">Max ETF expense ratio %</label>
             <input class="form-control form-control-sm" name="max_expense_ratio" data-pct type="number" step="0.01">
             <label class="form-label mt-2">Min market cap / AUM ($B)</label>
             <input class="form-control form-control-sm" name="min_size" data-billions type="number" step="1">
 
-            <div class="section">Sector / category</div>
+            <div class="o-section">Sector / category</div>
             <select class="form-select form-select-sm" name="sector" multiple size="6" id="sectors"></select>
-            <button type="button" class="btn btn-sm btn-link px-0" id="reset">Reset filters</button>
+            <button type="button" class="btn btn-ghost btn-sm w-100 mt-3" id="reset"><i class="bi bi-x-circle me-1"></i> Reset filters</button>
         </form>
+        </div>
+    </div>
 
-        <!-- results -->
-        <main class="col-lg-9 col-xl-10 py-3">
-            <div class="d-flex justify-content-between align-items-baseline mb-2">
-                <div id="count" class="text-secondary small"></div>
-                <div class="text-secondary small">Score ranks matches against your goal within the filtered list. Click a column to sort.</div>
+    <div class="col-lg-8 col-xl-9">
+        <div class="o-card">
+            <div class="d-flex justify-content-between align-items-baseline flex-wrap gap-2 mb-3">
+                <div id="count" class="text-2"></div>
+                <div class="small muted"><i class="bi bi-info-circle me-1"></i>Score ranks matches against your goal. Click a column to sort.</div>
             </div>
-            <div id="empty" class="alert alert-secondary d-none"></div>
-            <div class="table-responsive">
-                <table class="table table-dark table-hover table-sm align-middle">
+            <div id="empty" class="o-empty d-none"></div>
+            <div class="o-scroll" id="table-wrap" style="max-height: calc(100vh - 230px)">
+                <table class="o-table">
                     <thead><tr id="head"></tr></thead>
                     <tbody id="rows"></tbody>
                 </table>
             </div>
-            <p class="text-secondary small mt-3">
-                Data from Yahoo Finance, which can be delayed or incomplete. Yield is the trailing 12 month
-                dividend over price. Growth rates are annualized. Total return includes reinvested dividends.
-                Projected income assumes the 5 year dividend growth rate continues. Not investment advice.
-            </p>
-        </main>
+        </div>
+        <p class="small muted mt-3 mb-0">
+            Data from Yahoo Finance, which can be delayed or incomplete. Yield is the trailing 12 month
+            dividend over price. Growth rates are annualized. Total return includes reinvested dividends.
+            Projected income assumes the 5 year dividend growth rate continues. Not investment advice.
+        </p>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const pct = v => v == null ? '<span class="muted">–</span>' : `<span class="${v < 0 ? 'neg' : ''}">${(v * 100).toFixed(2)}%</span>`;
@@ -146,13 +141,13 @@ const COLUMNS = [
     ['symbol', 'Symbol', v => `<strong>${esc(v)}</strong>`],
     ['name', 'Name', v => `<span title="${esc(v)}">${esc(v.length > 28 ? v.slice(0, 27) + '…' : v)}</span>`],
     ['type', 'Type', v => v],
-    ['sector', 'Sector / Category', v => v ? esc(v) : '<span class="muted">–</span>'],
     ['price', 'Price', v => v == null ? '–' : '$' + num(v)],
     ['dividend_yield', 'Yield', pct, 'Trailing 12 month dividend / price'],
-    ['annual_dividend', 'Div/Share', v => v == null ? '–' : '$' + num(v)],
     ['annual_income', 'Yearly Income', money, 'Dividend income for the amount you invest', true],
     ['income_10y', 'Income in 10y', money, 'Yearly income in 10 years if dividend growth continues', true],
     ['amount_needed', 'Needed for Target', money, 'Amount to invest to reach your yearly income target', true],
+    ['annual_dividend', 'Div/Share', v => v == null ? '–' : '$' + num(v)],
+    ['sector', 'Sector / Category', v => v ? esc(v) : '<span class="muted">–</span>'],
     ['dividend_growth_5y', 'Div Growth 5y', pct, 'Yearly dividend growth over 5 years'],
     ['dividend_growth_10y', 'Div Growth 10y', pct],
     ['years_of_increases', 'Yrs Raised', v => num(v, 0), 'Consecutive years the dividend increased'],
@@ -196,7 +191,7 @@ function params() {
 function render() {
     const shown = COLUMNS.filter(c => !c[4] || rows.some(r => r[c[0]] != null));
     document.getElementById('head').innerHTML = shown.map(([k, label, , tip]) =>
-        `<th data-key="${k}" title="${tip || ''}" class="${k === sortKey ? 'sorted' : ''}" data-dir="${sortAsc ? '▲' : '▼'}">${label}</th>`).join('');
+        `<th data-key="${k}" title="${tip || ''}" class="sortable ${k === sortKey ? 'sorted' : ''}" data-dir="${sortAsc ? '▲' : '▼'}">${label}</th>`).join('');
 
     let sorted = rows;
     if (sortKey) {
@@ -217,9 +212,10 @@ async function load() {
     const data = await res.json();
     rows = data.results;
 
-    document.getElementById('updated').textContent =
-        data.refreshing ? 'Refreshing data…' : data.updated ? `Updated ${data.updated}` : '';
-    document.getElementById('count').textContent = `${rows.length} of ${data.total} match`;
+    document.getElementById('updated').innerHTML = data.refreshing
+        ? '<span class="spinner-border spinner-border-sm me-1"></span> Refreshing data…'
+        : data.updated ? `<i class="bi bi-clock me-1"></i>Updated ${esc(data.updated)}` : '';
+    document.getElementById('count').innerHTML = `<b>${rows.length}</b> of ${data.total} match`;
 
     const sel = document.getElementById('sectors');
     const chosen = new Set([...sel.selectedOptions].map(o => o.value));
@@ -227,6 +223,7 @@ async function load() {
 
     const empty = document.getElementById('empty');
     empty.classList.toggle('d-none', rows.length > 0);
+    document.getElementById('table-wrap').classList.toggle('d-none', rows.length === 0);
     empty.innerHTML = data.total === 0
         ? 'No data yet. Click <b>Refresh data</b> or run <code>python -m dividend_module.dividend_data</code>. Downloading takes a few minutes.'
         : 'Nothing matches these filters. Try loosening them.';
@@ -257,5 +254,4 @@ document.getElementById('refresh').onclick = async () => {
 };
 load();
 </script>
-</body>
-</html>
+{% endblock %}
