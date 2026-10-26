@@ -11,3 +11,6 @@ venv/
 
 # downloaded market data
 dividend_module/data/
+
+# agent paper trading log
+agent_module/data/

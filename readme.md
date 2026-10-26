@@ -77,3 +77,30 @@ Data comes from Yahoo Finance through `yfinance` and is cached in
 `dividend_module/data/dividend_data.json`. Build or update it with the
 Refresh data button or `python -m dividend_module.dividend_data`. The
 tickers are listed in `dividend_module/universe.py`.
+
+# Agent pipeline (paper trading)
+
+A live dashboard at `/agents` runs six agents once a minute on Kraken USD
+pairs. Each setup runs left to right:
+
+1. **Scan** watches the 25 most traded USD pairs and logs new listings.
+2. **Volume** passes pairs whose last closed 5 minute candle traded at
+   least 3x the median of the 24 before it and closed green.
+3. **Risk check** skips pairs with under $250k traded in 24 hours or a
+   spread over 0.5%. This stands in for a rug check until DEX pairs are added.
+4. **Size** risks 1% of the balance against a 2% stop, capped at 10% of the
+   balance per pair and 5 open positions.
+5. **Execute** paper fills buys at the ask and sells at the bid, plus 0.1%
+   slippage and a 0.4% fee each way. It exits on +4% take profit, -2% stop
+   loss, a 1.5% trailing stop once up 1.5%, or after 4 hours.
+6. **Log** records the balance for the equity curve. Every agent call, including
+   skips, is stored with its reason.
+
+Press Start on the page to begin. Nothing is sent to an exchange. Settings
+are in `agent_module/config.py`. Trades, positions and the event log are
+kept in `agent_module/data/agents.db`, so a restart picks up where it left
+off. Reset clears them.
+
+The dashboard shows average win, average loss, profit factor and drawdown
+next to the win rate, because win rate alone says nothing about whether the
+system makes money.
