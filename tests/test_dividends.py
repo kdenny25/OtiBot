@@ -194,7 +194,7 @@ def client(tmp_path, monkeypatch):
 def test_page_renders(client):
     resp = client.get('/dividends')
     assert resp.status_code == 200
-    assert b'Dividend Screener' in resp.data
+    assert b'Dividend screener' in resp.data
     assert b'Growing dividends' in resp.data
 
 

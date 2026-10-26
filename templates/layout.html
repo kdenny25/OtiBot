@@ -1,50 +1,80 @@
-<!DOCTYPE HTML>
-<!--
-	Initial Template: Solid State, by HTML5 UP
-	html5up.net | @ajlkn
-	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
-	Modified index page and all elements beyond index,  By Group One Development
--->
-<html>
-	<head>
-		<title>Cacciatore's by Group One Development</title>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}OtiBot{% endblock %} · OtiBot</title>
+    <script>
+        // set the theme before anything paints
+        (function () {
+            var theme = null;
+            try { theme = localStorage.getItem('otibot-theme'); } catch (e) {}
+            if (!theme) theme = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/otibot.css') }}" rel="stylesheet">
+    {% block styles %}{% endblock %}
+</head>
+<body>
+{% set nav = [
+    ('index', '/', 'bi-grid-1x2', 'Overview'),
+    ('agents.agents_page', '/agents', 'bi-robot', 'Agents'),
+    ('backtest.backtest_page', '/backtest', 'bi-graph-up-arrow', 'Backtest'),
+    ('dividends.dividends_page', '/dividends', 'bi-cash-coin', 'Dividends'),
+] %}
+{% macro sidebar() %}
+<aside class="o-sidebar">
+    <a class="o-brand" href="/"><span class="o-logo">O</span><span class="o-brand-name">OtiBot</span></a>
+    <nav class="o-nav">
+        <div class="o-nav-label">Workspace</div>
+        {% for endpoint, href, icon, label in nav %}
+        <a href="{{ href }}" class="{{ 'active' if request.endpoint == endpoint }}"><i class="bi {{ icon }}"></i>{{ label }}</a>
+        {% endfor %}
+    </nav>
+    <div class="o-sidebar-foot">
+        <button class="btn btn-ghost btn-sm w-100 d-flex align-items-center justify-content-center gap-2" onclick="O.toggleTheme()">
+            <i class="theme-icon bi bi-sun"></i> Switch theme
+        </button>
+        <div class="small muted mt-3 px-1">Paper trading only. Not investment advice.</div>
+    </div>
+</aside>
+{% endmacro %}
 
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
+<div class="o-shell">
+    {{ sidebar() }}
+    <div class="o-main">
+        <header class="o-topbar">
+            <a class="o-brand p-0" href="/"><span class="o-logo">O</span><span class="o-brand-name">OtiBot</span></a>
+            <button class="btn btn-ghost btn-icon" data-bs-toggle="offcanvas" data-bs-target="#mobile-nav" aria-label="Open menu">
+                <i class="bi bi-list fs-5"></i>
+            </button>
+        </header>
+        <main class="o-content">
+            <div class="o-page-head">
+                <div>
+                    <h1 class="o-page-title">{% block page_title %}{% endblock %}</h1>
+                    <p class="o-page-sub">{% block page_sub %}{% endblock %}</p>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">{% block actions %}{% endblock %}</div>
+            </div>
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</div>
 
-        <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
-        <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" integrity="sha384-oBqDVmMz9ATKxIep9tiCxS/Z9fNfEXiDAYTujMAeBAsjFuCZSmKbSSUnQlmh/jp3" crossorigin="anonymous"></script>
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" integrity="sha384-mQ93GR66B00ZXjt0YO5KlohRA5SY2XofN4zfuZxLkoj1gXtW8ANNCe9d5Y3eG5eD" crossorigin="anonymous"></script>
+<div class="offcanvas offcanvas-start o-offcanvas" tabindex="-1" id="mobile-nav" aria-label="Menu">
+    {{ sidebar() }}
+</div>
 
-        <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-{#        <noscript><link rel="stylesheet" href="{{ url_for('static', filename='/assets/css/noscript.css') }}" /></noscript>#}
-
-        {% block headerScripts %} {% endblock %}
-        {% block styles %}{% endblock %}
-        <style>
-            p {
-                color: #ffffff;
-            }
-
-            td {
-                color: #ffffff;
-            }
-
-        </style>
-    </head>
-
-    <body>
-
-        {% block content %}{% endblock %}
-
-        <!-- Scripts -->
-        <script src="{{ url_for('static', filename='/assets/js/jquery.min.js') }}"></script>
-        <script src="{{ url_for('static', filename='/assets/js/jquery.scrollex.min.js') }}"></script>
-        <script src="{{ url_for('static', filename='/assets/js/browser.min.js') }}"></script>
-        <script src="{{ url_for('static', filename='/assets/js/breakpoints.min.js') }}"></script>
-        <script src="{{ url_for('static', filename='/assets/js/util.js') }}"></script>
-        <script src="{{ url_for('static', filename='/assets/js/main.js') }}"></script>
-        {% block scripts %}{% endblock %}
-    </body>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/otibot.js') }}"></script>
+<script>O.setTheme(document.documentElement.getAttribute('data-bs-theme'));</script>
+{% block scripts %}{% endblock %}
+</body>
 </html>

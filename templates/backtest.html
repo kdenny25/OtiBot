@@ -1,0 +1,240 @@
+{% extends "layout.html" %}
+{% block title %}Backtest{% endblock %}
+{% block page_title %}Backtest{% endblock %}
+{% block page_sub %}See how a strategy would have traded past candles, after fees and slippage.{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-4 col-xl-3">
+        <form class="o-card" id="form" autocomplete="off">
+            <div class="o-section mt-0">Strategy</div>
+            <select class="form-select" name="strategy" id="strategy"></select>
+            <div class="small text-2 mt-2" id="strategy-desc"></div>
+            <div class="row g-2 mt-1" id="params"></div>
+
+            <div class="o-section">Data</div>
+            <div class="btn-group w-100 mb-2" role="group">
+                {% for key, label in sources.items() %}
+                <input type="radio" class="btn-check" name="source" value="{{ key }}" id="src-{{ key }}" {{ 'checked' if key == 'kraken' }}>
+                <label class="btn btn-seg btn-sm" for="src-{{ key }}" title="{{ label }}">{{ {'database': 'Database', 'kraken': 'Kraken', 'sample': 'Sample'}[key] }}</label>
+                {% endfor %}
+            </div>
+            <div class="small muted mb-2" id="source-hint"></div>
+            <div class="row g-2">
+                <div class="col-7">
+                    <label class="form-label">Pair</label>
+                    <input class="form-control" name="pair" list="pairs" value="ETHUSD">
+                    <datalist id="pairs">{% for p in pairs %}<option value="{{ p }}">{% endfor %}</datalist>
+                </div>
+                <div class="col-5">
+                    <label class="form-label">Candles</label>
+                    <select class="form-select" name="interval">
+                        {% for i in intervals %}
+                        <option value="{{ i }}" {{ 'selected' if i == 15 }}>{{ i ~ 'm' if i < 60 else (i // 60) ~ 'h' if i < 1440 else '1d' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="row g-2 mt-0" id="dates">
+                <div class="col-6"><label class="form-label">From</label><input class="form-control" type="date" name="start"></div>
+                <div class="col-6"><label class="form-label">To</label><input class="form-control" type="date" name="end"></div>
+            </div>
+
+            <div class="o-section">Account</div>
+            <div class="row g-2">
+                <div class="col-12"><label class="form-label">Starting capital ($)</label>
+                    <input class="form-control" type="number" name="capital" value="10000" min="100" step="100"></div>
+                <div class="col-6"><label class="form-label">Fee per fill %</label>
+                    <input class="form-control" type="number" name="fee" value="0.26" min="0" step="0.01"></div>
+                <div class="col-6"><label class="form-label">Slippage %</label>
+                    <input class="form-control" type="number" name="slippage" value="0.05" min="0" step="0.01"></div>
+            </div>
+            <div class="form-check form-switch mt-3">
+                <input class="form-check-input" type="checkbox" name="allow_short" id="allow-short">
+                <label class="form-check-label small" for="allow-short">Allow shorts on sell signals</label>
+            </div>
+            <label class="form-label mt-2">Check consistency across</label>
+            <select class="form-select" name="windows">
+                <option value="0">Whole period only</option>
+                <option value="2">2 back-to-back periods</option>
+                <option value="4" selected>4 back-to-back periods</option>
+                <option value="6">6 back-to-back periods</option>
+            </select>
+
+            <button class="btn btn-accent w-100 mt-4" type="submit" id="run">
+                <i class="bi bi-play-fill me-1"></i> Run backtest
+            </button>
+        </form>
+    </div>
+
+    <div class="col-lg-8 col-xl-9">
+        <div id="error" class="alert alert-danger d-none"></div>
+        <div id="empty" class="o-card">
+            <div class="o-empty py-5">
+                <i class="bi bi-graph-up-arrow"></i>
+                <div class="fw-semibold text-2 mb-1">Pick a strategy and press Run</div>
+                Results show the strategy against simply buying and holding, every trade it made,<br class="d-none d-md-inline">
+                and whether it held up across different stretches of the data.
+            </div>
+        </div>
+        <div id="results" class="d-none">
+            <div class="o-card mb-3">
+                <div class="o-card-head flex-wrap">
+                    <div>
+                        <div class="fw-semibold" id="r-title"></div>
+                        <div class="small text-2" id="r-sub"></div>
+                    </div>
+                    <div class="o-legend">
+                        <span style="--c: var(--o-accent)">Strategy</span>
+                        <span style="--c: var(--o-series-2)">Buy &amp; hold</span>
+                    </div>
+                </div>
+                <div class="row g-2 mb-3" id="tiles"></div>
+                <div id="chart"></div>
+            </div>
+            <div class="o-card mb-3 d-none" id="windows-card">
+                <div class="o-card-head">
+                    <h2 class="o-card-title">Consistency across periods</h2>
+                    <span class="small muted">same settings, fresh capital each period</span>
+                </div>
+                <div class="o-scroll">
+                    <table class="o-table">
+                        <thead><tr><th>Period</th><th>Dates</th><th class="text-end">Return</th><th class="text-end">Max drawdown</th>
+                            <th class="text-end">Sharpe</th><th class="text-end">Trades</th><th class="text-end">Win rate</th></tr></thead>
+                        <tbody id="windows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="o-card">
+                <div class="o-card-head">
+                    <h2 class="o-card-title">Trades</h2>
+                    <span class="small muted" id="trade-count"></span>
+                </div>
+                <div class="o-scroll" style="max-height: 420px">
+                    <table class="o-table">
+                        <thead><tr><th>Side</th><th>Entry</th><th>Exit</th><th class="text-end">Entry price</th>
+                            <th class="text-end">Exit price</th><th class="text-end">Return</th><th class="text-end">P&amp;L</th></tr></thead>
+                        <tbody id="trades"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+const form = $('form');
+let strategies = [];
+const SOURCE_HINTS = {
+    kraken: 'Pulls the most recent 720 candles from Kraken. No setup needed.',
+    database: 'Reads candles you collected into Postgres. Pick a date range.',
+    sample: 'A small offline ETH sample (Sep to Oct 2019), handy for trying things out.',
+};
+
+function iso(d) { return d.toISOString().slice(0, 10); }
+form.end.value = iso(new Date());
+form.start.value = iso(new Date(Date.now() - 90 * 864e5));
+
+function showParams() {
+    const s = strategies.find(s => s.key === form.strategy.value);
+    $('strategy-desc').textContent = s.description;
+    $('params').innerHTML = s.params.map(p => `
+        <div class="col-6"><label class="form-label">${O.esc(p.label)}</label>
+        <input class="form-control" type="number" data-param="${p.name}" value="${p.default}" min="${p.min}" max="${p.max}" step="${p.step}"></div>`).join('');
+}
+
+function showSource() {
+    const source = form.source.value;
+    $('source-hint').textContent = SOURCE_HINTS[source];
+    $('dates').classList.toggle('d-none', source !== 'database');
+    form.pair.disabled = form.interval.disabled = source === 'sample';
+}
+
+function tile(label, value, hint = '', cls = '') {
+    return `<div class="col-6 col-md-3"><div class="o-stat"><div class="label">${label}</div>
+        <div class="value num ${cls}">${value}</div><div class="hint">${hint}</div></div></div>`;
+}
+
+function render(r) {
+    const st = r.stats;
+    const capital = Number(form.capital.value);
+    // show the results first so the chart can measure its width
+    $('empty').classList.add('d-none');
+    $('results').classList.remove('d-none');
+    $('r-title').textContent = r.strategy;
+    $('r-sub').textContent = `${form.source.value === 'sample' ? 'Sample ETHUSD' : form.pair.value.toUpperCase()} · ${r.candles.toLocaleString()} candles · ${O.day(r.start)} to ${O.day(r.end)}`;
+    const beat = st.total_return - st.buy_hold_return;
+    $('tiles').innerHTML =
+        tile('Return', O.signedPct(st.total_return), `buy &amp; hold ${O.signedPct(st.buy_hold_return)}`, O.cls(st.total_return)) +
+        tile('Final balance', O.money(st.final_equity, 0), `${O.signed(st.final_equity - capital, 0)} on ${O.money(capital, 0)}`) +
+        tile('Max drawdown', O.pct(st.max_drawdown), 'largest drop from a peak') +
+        tile('Vs buy &amp; hold', O.signedPct(beat), beat >= 0 ? 'strategy did better' : 'holding did better', O.cls(beat)) +
+        tile('Trades', st.num_trades ?? 0, `avg ${O.signed(st.avg_pnl)}`) +
+        tile('Win rate', O.pct(st.win_rate), 'share of trades in profit') +
+        tile('Profit factor', st.profit_factor == null ? '–' : st.profit_factor.toFixed(2), 'gross wins ÷ gross losses') +
+        tile('Sharpe', st.sharpe == null ? '–' : st.sharpe.toFixed(2), 'return per unit of risk, yearly');
+
+    O.lineChart($('chart'), [
+        {name: 'Strategy', color: 'var(--o-accent)', points: r.equity},
+        {name: 'Buy & hold', color: 'var(--o-series-2)', points: r.buy_hold, dashed: true},
+    ], {height: 300, format: v => O.money(v, 0)});
+
+    $('windows-card').classList.toggle('d-none', !r.windows.length);
+    $('windows').innerHTML = r.windows.map(w => `<tr>
+        <td>#${w.window}</td><td class="text-2">${O.day(w.start)} – ${O.day(w.end)}</td>
+        <td class="text-end fw-semibold ${O.cls(w.total_return)}">${O.signedPct(w.total_return)}</td>
+        <td class="text-end">${O.pct(w.max_drawdown)}</td><td class="text-end">${w.sharpe == null ? '–' : w.sharpe.toFixed(2)}</td>
+        <td class="text-end">${w.num_trades ?? 0}</td><td class="text-end">${O.pct(w.win_rate)}</td></tr>`).join('');
+
+    $('trade-count').textContent = r.trades.length ? `${st.num_trades} round trips${st.num_trades > r.trades.length ? `, latest ${r.trades.length} shown` : ''}` : '';
+    $('trades').innerHTML = r.trades.length ? r.trades.map(t => `<tr>
+        <td><span class="tag ${t.side === 'long' ? 'tag-PASS' : 'tag-SKIP'}">${t.side.toUpperCase()}</span></td>
+        <td class="text-2">${O.date(t.entry_time)}</td><td class="text-2">${O.date(t.exit_time)}</td>
+        <td class="text-end">${O.price(t.entry_price)}</td><td class="text-end">${O.price(t.exit_price)}</td>
+        <td class="text-end ${O.cls(t.return)}">${O.signedPct(t.return, 2)}</td>
+        <td class="text-end fw-semibold ${O.cls(t.pnl)}">${O.signed(t.pnl)}</td></tr>`).join('')
+        : '<tr><td colspan="7" class="o-empty">No trades. The strategy never got a signal on this data.</td></tr>';
+
+}
+
+form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const params = {};
+    form.querySelectorAll('[data-param]').forEach(i => params[i.dataset.param] = Number(i.value));
+    const body = {
+        strategy: form.strategy.value, params, source: form.source.value,
+        pair: form.pair.value.trim().toUpperCase(), interval: Number(form.interval.value),
+        start: form.start.value, end: form.end.value,
+        capital: Number(form.capital.value), fee: Number(form.fee.value) / 100,
+        slippage: Number(form.slippage.value) / 100, allow_short: form.allow_short.checked,
+        windows: Number(form.windows.value),
+    };
+    const btn = $('run');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running…';
+    $('error').classList.add('d-none');
+    try {
+        render(await O.postJSON('/api/backtest/run', body));
+    } catch (err) {
+        $('error').textContent = err.message;
+        $('error').classList.remove('d-none');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Run backtest';
+    }
+});
+
+form.strategy.addEventListener('change', showParams);
+form.querySelectorAll('[name=source]').forEach(r => r.addEventListener('change', showSource));
+
+O.getJSON('/api/backtest/strategies').then(list => {
+    strategies = list;
+    form.strategy.innerHTML = list.map(s => `<option value="${s.key}">${O.esc(s.name)}</option>`).join('');
+    showParams();
+});
+showSource();
+</script>
+{% endblock %}

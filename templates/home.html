@@ -1,0 +1,163 @@
+{% extends "layout.html" %}
+{% block title %}Overview{% endblock %}
+{% block page_title %}Overview{% endblock %}
+{% block page_sub %}Your agents, backtests and dividend picks in one place.{% endblock %}
+{% block actions %}
+<a href="/backtest" class="btn btn-ghost"><i class="bi bi-play-circle me-1"></i> New backtest</a>
+<a href="/agents" class="btn btn-accent"><i class="bi bi-robot me-1"></i> Open agents</a>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3" id="market">
+    {% for symbol in ['BTC', 'ETH', 'SOL', 'XRP'] %}
+    <div class="col-6 col-xl-3">
+        <div class="o-card py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">{{ symbol }}<span class="muted fw-normal">/USD</span></span>
+                <span class="small num" data-change="{{ symbol }}">–</span>
+            </div>
+            <div class="fs-4 fw-bold num mt-1" data-price="{{ symbol }}">–</div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+<div class="small muted mb-3 d-none" id="market-error"><i class="bi bi-wifi-off me-1"></i>Live prices are unavailable right now.</div>
+
+<div class="row g-3">
+    <div class="col-xl-7">
+        <div class="o-card h-100">
+            <div class="o-card-head">
+                <h2 class="o-card-title"><i class="bi bi-robot me-1"></i> Agents</h2>
+                <span class="o-pill" id="agent-status"><span class="dot"></span>stopped</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-end justify-content-between gap-3">
+                <div>
+                    <div class="small text-2">Paper balance</div>
+                    <div class="o-big num" id="agent-balance">–</div>
+                    <div class="small num" id="agent-pnl"></div>
+                </div>
+                <div class="flex-grow-1" style="min-width: 220px; max-width: 420px" id="agent-spark"></div>
+            </div>
+            <div class="row g-2 mt-3">
+                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Win rate</div><div class="value num" id="agent-winrate">–</div><div class="hint" id="agent-closes"></div></div></div>
+                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Profit factor</div><div class="value num" id="agent-pf">–</div><div class="hint">wins ÷ losses</div></div></div>
+                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Max drawdown</div><div class="value num" id="agent-dd">–</div></div></div>
+                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Open positions</div><div class="value num" id="agent-open">–</div></div></div>
+            </div>
+            <div class="mt-auto pt-3 d-flex justify-content-between align-items-center">
+                <span class="small muted" id="agent-last"></span>
+                <a href="/agents" class="small fw-semibold text-decoration-none">Dashboard <i class="bi bi-arrow-right"></i></a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-5">
+        <div class="o-card h-100">
+            <div class="o-card-head">
+                <h2 class="o-card-title"><i class="bi bi-graph-up-arrow me-1"></i> Last backtest</h2>
+                <a href="/backtest" class="small fw-semibold text-decoration-none">Run one <i class="bi bi-arrow-right"></i></a>
+            </div>
+            <div id="backtest-body" class="flex-grow-1">
+                <div class="o-empty"><i class="bi bi-clock-history"></i>No backtest run yet.<br>
+                    Pick a strategy and see how it would have done.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="o-card">
+            <div class="o-card-head">
+                <h2 class="o-card-title"><i class="bi bi-cash-coin me-1"></i> Top dividend picks <span class="text-2 text-transform-none fw-normal" style="text-transform:none;letter-spacing:0">· balanced goal</span></h2>
+                <a href="/dividends" class="small fw-semibold text-decoration-none">Open screener <i class="bi bi-arrow-right"></i></a>
+            </div>
+            <div class="o-scroll">
+                <table class="o-table">
+                    <thead><tr><th>Symbol</th><th>Name</th><th>Type</th><th>Score</th><th class="text-end">Yield</th>
+                        <th class="text-end">Div growth 5y</th><th class="text-end">Years raised</th><th class="text-end">Total return 5y</th></tr></thead>
+                    <tbody id="picks"><tr><td colspan="8" class="o-empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+            <div class="small muted mt-2" id="picks-updated"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+
+async function loadMarket() {
+    try {
+        const data = await O.getJSON('/api/market');
+        $('market-error').classList.add('d-none');
+        data.forEach(m => {
+            document.querySelector(`[data-price="${m.symbol}"]`).textContent = O.money(m.price, m.price < 10 ? 4 : 2);
+            const ch = document.querySelector(`[data-change="${m.symbol}"]`);
+            ch.textContent = O.signedPct(m.change, 2);
+            ch.className = 'small num fw-semibold ' + O.cls(m.change);
+        });
+    } catch (e) {
+        $('market-error').classList.remove('d-none');
+    }
+}
+
+async function loadAgents() {
+    const s = await O.getJSON('/api/agents/state');
+    const st = s.stats;
+    $('agent-status').className = 'o-pill' + (s.running ? ' live' : '');
+    $('agent-status').innerHTML = `<span class="dot"></span>${s.running ? 'running' : 'stopped'} · paper`;
+    $('agent-balance').textContent = O.money(s.balance);
+    const pnl = s.balance - s.start_balance;
+    $('agent-pnl').innerHTML = `<span class="${O.cls(pnl)} fw-semibold">${O.signed(pnl)}</span>
+        <span class="muted">(${O.signedPct(pnl / s.start_balance, 2)}) since ${O.day(s.started)}</span>`;
+    $('agent-winrate').textContent = O.pct(st.win_rate);
+    $('agent-closes').textContent = `${st.wins}W / ${st.losses}L`;
+    $('agent-pf').textContent = st.profit_factor == null ? '–' : st.profit_factor.toFixed(2);
+    $('agent-dd').textContent = O.pct(st.max_drawdown);
+    $('agent-open').textContent = s.positions.length;
+    const last = s.calls[0];
+    $('agent-last').textContent = last ? `Last call ${O.date(last.time)}: ${last.agent} ${last.action.toLowerCase()}` : 'Press Start on the dashboard to begin';
+    O.lineChart($('agent-spark'), [{name: 'Balance', color: 'var(--o-accent)',
+        points: s.equity_curve.map(p => ({t: p.time, v: p.value}))}], {height: 70, spark: true, empty: '<span class="small">curve fills in as agents run</span>'});
+}
+
+async function loadBacktest() {
+    const r = await O.getJSON('/api/backtest/last');
+    if (!r) return;
+    const st = r.stats;
+    $('backtest-body').innerHTML = `
+        <div class="fw-semibold">${O.esc(r.strategy)}</div>
+        <div class="small text-2 mb-3">${O.esc(r.pair)} · ${O.day(r.start)} to ${O.day(r.end)}</div>
+        <div class="row g-2">
+            <div class="col-6"><div class="o-stat"><div class="label">Return</div><div class="value num ${O.cls(st.total_return)}">${O.signedPct(st.total_return)}</div>
+                <div class="hint">buy &amp; hold ${O.signedPct(st.buy_hold_return)}</div></div></div>
+            <div class="col-6"><div class="o-stat"><div class="label">Max drawdown</div><div class="value num">${O.pct(st.max_drawdown)}</div></div></div>
+            <div class="col-6"><div class="o-stat"><div class="label">Trades</div><div class="value num">${st.num_trades ?? 0}</div>
+                <div class="hint">win rate ${O.pct(st.win_rate)}</div></div></div>
+            <div class="col-6"><div class="o-stat"><div class="label">Sharpe</div><div class="value num">${st.sharpe == null ? '–' : st.sharpe.toFixed(2)}</div></div></div>
+        </div>`;
+}
+
+async function loadPicks() {
+    try {
+        const d = await O.getJSON('/api/dividends?goal=balanced');
+        $('picks-updated').textContent = d.updated ? `Data updated ${d.updated}` : '';
+        $('picks').innerHTML = d.results.length ? d.results.slice(0, 6).map(r => `<tr>
+            <td class="fw-bold">${O.esc(r.symbol)}</td><td class="text-2">${O.esc(r.name)}</td><td>${O.esc(r.type)}</td>
+            <td><span class="score-bar"><span style="width:${r.score}%"></span></span>${Math.round(r.score)}</td>
+            <td class="text-end">${O.pct(r.dividend_yield, 2)}</td><td class="text-end">${O.pct(r.dividend_growth_5y)}</td>
+            <td class="text-end">${r.years_of_increases ?? '–'}</td>
+            <td class="text-end ${O.cls(r.total_return_5y)}">${O.pct(r.total_return_5y)}</td></tr>`).join('')
+            : `<tr><td colspan="8" class="o-empty"><i class="bi bi-cloud-download"></i>No dividend data yet.
+                <a href="/dividends">Open the screener</a> and press Refresh data.</td></tr>`;
+    } catch (e) {
+        $('picks').innerHTML = `<tr><td colspan="8" class="o-empty">Couldn't load dividend data.</td></tr>`;
+    }
+}
+
+loadMarket(); loadAgents(); loadBacktest(); loadPicks();
+setInterval(loadAgents, 15000);
+setInterval(loadMarket, 30000);
+</script>
+{% endblock %}
