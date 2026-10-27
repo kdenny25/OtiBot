@@ -54,6 +54,11 @@ def index():
     return render_template('home.html')
 
 
+@app.route('/healthz')
+def healthz():
+    return jsonify({'ok': True})
+
+
 @app.route('/api/market')
 def market_api():
     try:

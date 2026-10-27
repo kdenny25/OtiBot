@@ -1,18 +1,10 @@
 # install using - pip install -r requirements.txt
 
-# pandas dataframes
-pandas
+# everything the web app needs, see requirements-web.txt
+-r requirements-web.txt
 
-# for api calls
-requests
-
-flask-socketio
-
-# websockets
+# websockets for the exchange stream scripts
 websocket-client
-
-# .env config
-python-dotenv
 
 # json reading/writing
 simplejson
@@ -20,18 +12,8 @@ simplejson
 # API documentation generator
 sphinx
 
-# flask
-flask
-gevent-websocket
-
 # charts
 lightweight-charts
-
-# database example
-psycopg2
-
-# stock and ETF data for the dividend screener
-yfinance
 
 # backtesting library
 backtesting

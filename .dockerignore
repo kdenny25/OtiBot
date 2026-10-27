@@ -1,0 +1,13 @@
+.git
+.idea
+.env
+user/
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+agent_module/data/
+dividend_module/data/
+documents/
+strategies/*.ipynb

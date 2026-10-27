@@ -84,3 +84,19 @@ def test_market_api_error(client, monkeypatch):
     monkeypatch.setattr(web, 'market_snapshot', fail)
     resp = client.get('/api/market')
     assert resp.status_code == 502
+
+
+def test_healthz(client):
+    assert client.get('/healthz').get_json() == {'ok': True}
+
+
+def test_agents_autostart(monkeypatch):
+    from flask import Flask
+    from agent_module import routes
+
+    started = []
+    monkeypatch.setattr(routes.runner, 'start', lambda: started.append(True))
+    monkeypatch.setattr(routes.runner, 'socketio', routes.runner.socketio)
+    monkeypatch.setenv('AGENTS_AUTOSTART', 'true')
+    routes.init_agents(Flask('autostart'), socketio=None)
+    assert started == [True]
