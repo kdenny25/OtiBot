@@ -1,4 +1,5 @@
 # Flask pages and the background loop for the agent dashboard.
+import os
 import threading
 
 from flask import Blueprint, jsonify, render_template
@@ -69,6 +70,9 @@ def init_agents(app, socketio, pipeline_factory=None):
         runner._pipeline = None
     runner.socketio = socketio
     app.register_blueprint(agents_bp)
+    # e.g. in Docker, so a restart picks paper trading back up without a click
+    if os.getenv('AGENTS_AUTOSTART', '').lower() in ('1', 'true', 'yes'):
+        runner.start()
 
 
 @agents_bp.route('/agents')

@@ -1,0 +1,49 @@
+# Runs the web app and a Postgres database for candle data.
+#   docker compose up -d --build     then open http://localhost:5000
+services:
+  web:
+    build: .
+    image: otibot
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-5000}:5000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-crypto_data}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-otibot}
+      AGENTS_AUTOSTART: ${AGENTS_AUTOSTART:-false}
+    volumes:
+      - agent-data:/app/agent_module/data
+      - dividend-data:/app/dividend_module/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-crypto_data}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-otibot}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    # reachable from your machine on 5433, the port the scripts default to
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  agent-data:
+  dividend-data:
+  db-data:

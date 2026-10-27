@@ -1,0 +1,21 @@
+# what the web app needs to run, used by the Docker image.
+# requirements.txt adds research and test tools on top of this.
+
+flask
+flask-socketio
+# websocket support and the production server
+gevent-websocket
+gunicorn
+# gunicorn's gevent worker imports it but does not install it
+packaging
+
+pandas
+numpy
+requests
+python-dotenv
+
+# postgres driver, prebuilt so no compiler is needed
+psycopg2-binary
+
+# stock and ETF data for the dividend screener
+yfinance

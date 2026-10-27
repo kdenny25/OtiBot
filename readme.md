@@ -125,3 +125,33 @@ sidebar and your choice is remembered).
 
 Shared styles and helpers are in `static/css/otibot.css` and
 `static/js/otibot.js`.
+
+# Docker
+
+Run the web app and a Postgres database with Docker Compose:
+
+    cp .env.example .env        # optional, set DB_PASSWORD and other settings
+    docker compose up -d --build
+
+Then open http://localhost:5000. The app runs under gunicorn with one
+gevent worker so live updates over SocketIO work and the agent loop has a
+single home.
+
+- The database is created on first start with the `crypto_pair` table and is
+  reachable from your machine on `localhost:5433`, the port the collection
+  scripts already use. Data lives in the `db-data` volume.
+- Agent paper trades and the dividend data cache are kept in the
+  `agent-data` and `dividend-data` volumes, so they survive rebuilds.
+- Set `AGENTS_AUTOSTART=true` in `.env` to start paper trading whenever the
+  container starts, instead of pressing Start on the Agents page.
+- Change the web port with `WEB_PORT=8080` and the database port with
+  `DB_HOST_PORT`.
+- `docker compose logs -f web` shows the app log, and `docker compose down`
+  stops everything (add `-v` to also delete the volumes and their data).
+
+To use a database you already run instead, start only the web container and
+point it at yours. Build the image with `docker build -t otibot .`, then
+
+    docker run -d -p 5000:5000 --env-file .env \
+        -e DB_HOST=host.docker.internal --add-host host.docker.internal:host-gateway \
+        -v otibot-agents:/app/agent_module/data otibot
