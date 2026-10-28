@@ -216,12 +216,14 @@ form.addEventListener('submit', async e => {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running…';
     $('error').classList.add('d-none');
+    $('results').classList.add('o-dim');
     try {
         render(await O.postJSON('/api/backtest/run', body));
     } catch (err) {
         $('error').textContent = err.message;
         $('error').classList.remove('d-none');
     } finally {
+        $('results').classList.remove('o-dim');
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Run backtest';
     }

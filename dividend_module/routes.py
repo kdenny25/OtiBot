@@ -9,7 +9,7 @@ from dividend_module.screener import GOALS, screen
 dividends_bp = Blueprint('dividends', __name__)
 
 _refresh_lock = threading.Lock()
-_refresh_state = {'running': False, 'error': None}
+_refresh_state = {'running': False, 'error': None, 'done': 0, 'total': 0, 'symbol': None}
 
 FLOAT_ARGS = ['min_yield', 'max_yield', 'min_dividend_growth', 'min_price_growth',
               'min_total_return', 'max_volatility', 'min_size', 'max_expense_ratio',
@@ -51,12 +51,17 @@ def dividends_api():
                     'sectors': sectors,
                     'refreshing': _refresh_state['running'],
                     'refresh_error': _refresh_state['error'],
+                    'refresh_progress': {k: _refresh_state[k] for k in ('done', 'total', 'symbol')},
                     'results': results})
+
+
+def _progress(done, total, symbol):
+    _refresh_state.update(done=done, total=total, symbol=symbol)
 
 
 def _run_refresh():
     try:
-        dividend_data.refresh()
+        dividend_data.refresh(progress=_progress)
         _refresh_state['error'] = None
     except Exception as e:
         _refresh_state['error'] = str(e)
@@ -69,6 +74,6 @@ def dividends_refresh():
     """ Downloads fresh data in the background. Takes a few minutes. """
     with _refresh_lock:
         if not _refresh_state['running']:
-            _refresh_state['running'] = True
+            _refresh_state.update(running=True, done=0, total=0, symbol=None)
             threading.Thread(target=_run_refresh, daemon=True).start()
     return jsonify({'refreshing': True})

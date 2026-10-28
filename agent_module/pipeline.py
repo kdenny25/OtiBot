@@ -82,6 +82,7 @@ class Pipeline:
         for name, label in AGENTS:
             last = self.store.last_event(name) or {}
             pipeline.append({'name': name, 'label': label,
+                             'event_id': last.get('id'),
                              'symbol': last.get('symbol'),
                              'action': last.get('action'),
                              'detail': last.get('detail')})

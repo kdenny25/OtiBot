@@ -101,16 +101,24 @@
     </div>
 
     <div class="col-lg-8 col-xl-9">
+        <div class="o-card mb-3 d-none" id="refresh-box">
+            <div class="d-flex justify-content-between align-items-center mb-2 small">
+                <span><span class="spinner-border spinner-border-sm text-warning me-2"></span><span id="refresh-text">Starting download…</span></span>
+                <span class="muted" id="refresh-pct"></span>
+            </div>
+            <div class="o-bar indeterminate" id="refresh-bar"><span style="width:0"></span></div>
+            <div class="small muted mt-2">Downloading from Yahoo Finance takes a few minutes. You can keep using the page.</div>
+        </div>
         <div class="o-card">
             <div class="d-flex justify-content-between align-items-baseline flex-wrap gap-2 mb-3">
-                <div id="count" class="text-2"></div>
+                <div id="count" class="text-2"><span class="o-skel" style="width:7em">&nbsp;</span></div>
                 <div class="small muted"><i class="bi bi-info-circle me-1"></i>Score ranks matches against your goal. Click a column to sort.</div>
             </div>
             <div id="empty" class="o-empty d-none"></div>
             <div class="o-scroll" id="table-wrap" style="max-height: calc(100vh - 230px)">
                 <table class="o-table">
                     <thead><tr id="head"></tr></thead>
-                    <tbody id="rows"></tbody>
+                    <tbody id="rows"><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -206,32 +214,57 @@ function render() {
         '<tr>' + shown.map(([k, , fmt]) => `<td>${fmt(r[k])}</td>`).join('') + '</tr>').join('');
 }
 
-let pending;
-async function load() {
-    const res = await fetch('/api/dividends?' + params());
-    const data = await res.json();
+let pending, poll;
+async function load(quiet = false) {
+    const wrap = document.getElementById('table-wrap');
+    if (!quiet) wrap.classList.add('o-dim');
+    let data;
+    try {
+        data = await O.getJSON('/api/dividends?' + params(), {quiet});
+    } finally {
+        wrap.classList.remove('o-dim');
+    }
     rows = data.results;
 
-    document.getElementById('updated').innerHTML = data.refreshing
-        ? '<span class="spinner-border spinner-border-sm me-1"></span> Refreshing data…'
-        : data.updated ? `<i class="bi bi-clock me-1"></i>Updated ${esc(data.updated)}` : '';
+    document.getElementById('updated').innerHTML =
+        (data.updated ? `<i class="bi bi-clock me-1"></i>Updated ${esc(data.updated)}` : '') +
+        (data.refresh_error && !data.refreshing
+            ? `<span class="neg ms-2" title="${esc(data.refresh_error)}"><i class="bi bi-exclamation-triangle me-1"></i>Last refresh failed</span>` : '');
     document.getElementById('count').innerHTML = `<b>${rows.length}</b> of ${data.total} match`;
 
     const sel = document.getElementById('sectors');
     const chosen = new Set([...sel.selectedOptions].map(o => o.value));
-    sel.innerHTML = data.sectors.map(s => `<option ${chosen.has(s) ? 'selected' : ''}>${esc(s)}</option>`).join('');
+    O.setHTML(sel, data.sectors.map(s => `<option ${chosen.has(s) ? 'selected' : ''}>${esc(s)}</option>`).join(''));
 
     const empty = document.getElementById('empty');
     empty.classList.toggle('d-none', rows.length > 0);
-    document.getElementById('table-wrap').classList.toggle('d-none', rows.length === 0);
+    wrap.classList.toggle('d-none', rows.length === 0);
     empty.innerHTML = data.total === 0
-        ? 'No data yet. Click <b>Refresh data</b> or run <code>python -m dividend_module.dividend_data</code>. Downloading takes a few minutes.'
+        ? (data.refreshing ? '<i class="bi bi-cloud-download"></i>Your data is downloading. Results appear here when it finishes.'
+                           : '<i class="bi bi-cloud-download"></i>No data yet. Click <b>Refresh data</b> to download it. It takes a few minutes.')
         : 'Nothing matches these filters. Try loosening them.';
     if (data.refresh_error) empty.innerHTML += `<br>Last refresh failed: ${esc(data.refresh_error)}`;
 
     render();
-    clearTimeout(pending);
-    if (data.refreshing) pending = setTimeout(load, 5000);
+    showRefresh(data);
+    clearTimeout(poll);
+    if (data.refreshing) poll = setTimeout(() => load(true), 2000);
+}
+
+function showRefresh(data) {
+    const btn = document.getElementById('refresh');
+    document.getElementById('refresh-box').classList.toggle('d-none', !data.refreshing);
+    btn.disabled = data.refreshing;
+    O.setHTML(btn, data.refreshing ? '<span class="spinner-border spinner-border-sm me-1"></span> Refreshing…'
+                                   : '<i class="bi bi-arrow-repeat me-1"></i> Refresh data');
+    if (!data.refreshing) return;
+    const p = data.refresh_progress || {};
+    const bar = document.getElementById('refresh-bar');
+    bar.classList.toggle('indeterminate', !p.total);
+    bar.firstElementChild.style.width = p.total ? (100 * p.done / p.total) + '%' : '0';
+    document.getElementById('refresh-text').textContent = p.total
+        ? `Downloading ${p.symbol} (${p.done + 1} of ${p.total})` : 'Starting download…';
+    document.getElementById('refresh-pct').textContent = p.total ? Math.round(100 * p.done / p.total) + '%' : '';
 }
 
 form.addEventListener('input', () => {
@@ -249,8 +282,9 @@ document.getElementById('head').addEventListener('click', e => {
     render();
 });
 document.getElementById('refresh').onclick = async () => {
-    await fetch('/api/dividends/refresh', {method: 'POST'});
-    load();
+    showRefresh({refreshing: true, refresh_progress: {}});
+    await O.postJSON('/api/dividends/refresh');
+    load(true);
 };
 load();
 </script>

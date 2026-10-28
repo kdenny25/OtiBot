@@ -1,6 +1,7 @@
 # Flask pages and the background loop for the agent dashboard.
 import os
 import threading
+import time
 
 from flask import Blueprint, jsonify, render_template
 
@@ -16,6 +17,8 @@ class Runner:
         self.socketio = None
         self.lock = threading.Lock()
         self.running = False
+        self.cycling = False
+        self.last_cycle = None
         self.error = None
 
     @property
@@ -27,6 +30,10 @@ class Runner:
     def state(self):
         state = self.pipeline.state()
         state['running'] = self.running
+        state['cycling'] = self.cycling
+        # epoch seconds, so the page can count down to the next scan
+        state['last_cycle'] = self.last_cycle
+        state['cycle_seconds'] = self.pipeline.config.cycle_seconds
         state['error'] = self.error
         return state
 
@@ -42,11 +49,15 @@ class Runner:
 
     def _loop(self):
         while self.running:
+            self.cycling = True
+            self.socketio.emit('agent_cycle', {'cycling': True})
             try:
                 self.pipeline.run_cycle()
                 self.error = None
             except Exception as e:
                 self.error = str(e)
+            self.cycling = False
+            self.last_cycle = time.time()
             self.socketio.emit('agent_state', self.state())
             # sleep in steps so stop takes effect quickly
             for _ in range(self.pipeline.config.cycle_seconds):
