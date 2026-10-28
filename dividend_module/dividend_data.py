@@ -6,12 +6,17 @@
 import json
 import math
 import os
+import warnings
 from datetime import datetime, timezone
 
 import pandas as pd
 
 from dividend_module import metrics
 from dividend_module.universe import DEFAULT_UNIVERSE
+
+# yfinance still calls pandas with inplace=True, which pandas 3.1 deprecates.
+# It's inside yfinance and harmless, so keep it out of the log.
+warnings.filterwarnings('ignore', message='The inplace keyword', module='yfinance')
 
 CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'dividend_data.json')
 
@@ -123,10 +128,14 @@ def fetch_record(symbol):
                         history['Close'], history['Adj Close'])
 
 
-def refresh(symbols=None, path=CACHE_PATH):
+def refresh(symbols=None, path=CACHE_PATH, progress=None):
     """
     Downloads every symbol and writes the cache. Symbols that fail are
     skipped and listed in the cache under 'errors'.
+
+    :param:
+        progress (function): optional, called with (done, total, symbol)
+                             before each download
 
     :return:
         dict: the cache contents
@@ -135,10 +144,17 @@ def refresh(symbols=None, path=CACHE_PATH):
     records, errors = [], {}
     for i, symbol in enumerate(symbols, 1):
         print(f'{i}/{len(symbols)} {symbol}')
+        if progress:
+            progress(i - 1, len(symbols), symbol)
         try:
             records.append(fetch_record(symbol))
         except Exception as e:
             errors[symbol] = str(e)
+
+    if not records:
+        # e.g. Yahoo is down or blocked, so keep the data we already have
+        first = next(iter(errors.items()), ('', 'no symbols'))
+        raise RuntimeError(f'Every download failed, kept the existing data. {first[0]}: {first[1]}')
 
     cache = {'updated': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'),
              'records': records,

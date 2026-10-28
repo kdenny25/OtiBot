@@ -12,14 +12,65 @@ O.price = v => v == null ? '–' : Number(v).toPrecision(6).replace(/\.?0+$/, ''
 O.date = t => t ? new Date(t).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) : '';
 O.day = t => t ? new Date(t).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'}) : '';
 
-O.getJSON = async (url, options) => {
-    const res = await fetch(url, options);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || res.statusText);
-    return data;
+// the thin bar at the top of the page shows while any request is running
+O._busy = 0;
+O.busy = delta => {
+    O._busy = Math.max(0, O._busy + delta);
+    document.documentElement.classList.toggle('o-loading', O._busy > 0);
+};
+
+// pass {quiet: true} for background polling so the bar doesn't flicker
+O.getJSON = async (url, options = {}) => {
+    const {quiet, ...fetchOptions} = options;
+    if (!quiet) O.busy(1);
+    try {
+        const res = await fetch(url, fetchOptions);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        return data;
+    } finally {
+        if (!quiet) O.busy(-1);
+    }
 };
 O.postJSON = (url, body) => O.getJSON(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
                                              body: JSON.stringify(body || {})});
+
+// removes the shimmering placeholders inside root once its data is in
+O.ready = root => (root || document).querySelectorAll('.o-skel').forEach(el => el.classList.remove('o-skel'));
+
+// sets innerHTML only when it changed, so unchanged parts don't flicker
+O.setHTML = (el, html) => {
+    if (el._html === html) return false;
+    el._html = html;
+    el.innerHTML = html;
+    return true;
+};
+
+// counts a number up or down to its new value instead of jumping
+O.tween = (el, to, fmt, ms = 700) => {
+    cancelAnimationFrame(el._raf);
+    if (to == null || Number.isNaN(to)) { el._v = null; el.textContent = fmt(to); return; }
+    const from = el._v ?? to;
+    el._v = to;
+    if (from === to || matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = fmt(to); return; }
+    const t0 = performance.now();
+    const step = now => {
+        const k = Math.min(1, (now - t0) / ms);
+        el.textContent = fmt(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+        if (k < 1) el._raf = requestAnimationFrame(step);
+    };
+    el._raf = requestAnimationFrame(step);
+    el.classList.remove('o-flash'); void el.offsetWidth; el.classList.add('o-flash');
+};
+
+// buttons show a spinner while their action runs
+O.withSpinner = async (btn, fn) => {
+    const html = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.style.minWidth = btn.offsetWidth + 'px';
+    try { return await fn(); } finally { btn.disabled = false; btn.innerHTML = html; }
+};
 
 // theme: saved choice, else the system setting
 O.setTheme = theme => {

@@ -22,6 +22,12 @@
     .stage .last { font-size: .74rem; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .stage i.bi { font-size: 1.1rem; color: var(--o-accent); }
     .feed { max-height: 380px; }
+    #ring { transition: stroke-dasharray .9s cubic-bezier(.2, .8, .2, 1); }
+    .stage { transition: border-color .4s, background .4s; }
+    .stage.pulse { animation: stage-pulse 1.2s ease-out; }
+    @keyframes stage-pulse { from { box-shadow: 0 0 0 0 var(--o-accent); } to { box-shadow: 0 0 0 10px transparent; } }
+    #cycle-bar { height: 3px; }
+    #cycle-bar > span { transition: width 1s linear; }
 </style>
 {% endblock %}
 
@@ -38,19 +44,19 @@
                         <circle id="ring" cx="66" cy="66" r="56" fill="none" style="stroke:var(--o-accent)" stroke-width="11"
                                 stroke-linecap="round" stroke-dasharray="0 351.86" transform="rotate(-90 66 66)"/>
                     </svg>
-                    <div class="center"><div><div class="fs-3 fw-bold num" id="winrate">–</div><div class="small muted">wins</div></div></div>
+                    <div class="center"><div><div class="fs-3 fw-bold num o-skel" id="winrate">–</div><div class="small muted">wins</div></div></div>
                 </div>
                 <div class="num">
-                    <div class="fs-5 fw-semibold"><span class="pos" id="wins">0</span> <span class="muted">/</span> <span class="neg" id="losses">0</span></div>
+                    <div class="fs-5 fw-semibold"><span class="pos" id="wins">–</span> <span class="muted">/</span> <span class="neg" id="losses">–</span></div>
                     <div class="small text-2">won / lost</div>
                 </div>
             </div>
             <!-- win rate means little without payoff size, so it sits next to it -->
             <div class="row g-2 mt-3">
-                <div class="col-6"><div class="o-stat"><div class="label">Avg win</div><div class="value num pos" id="avg-win">–</div></div></div>
-                <div class="col-6"><div class="o-stat"><div class="label">Avg loss</div><div class="value num neg" id="avg-loss">–</div></div></div>
-                <div class="col-6"><div class="o-stat"><div class="label">Profit factor</div><div class="value num" id="pf">–</div><div class="hint">above 1 makes money</div></div></div>
-                <div class="col-6"><div class="o-stat"><div class="label">Max drawdown</div><div class="value num" id="dd">–</div></div></div>
+                <div class="col-6"><div class="o-stat"><div class="label">Avg win</div><div class="value num pos o-skel" id="avg-win">–</div></div></div>
+                <div class="col-6"><div class="o-stat"><div class="label">Avg loss</div><div class="value num neg o-skel" id="avg-loss">–</div></div></div>
+                <div class="col-6"><div class="o-stat"><div class="label">Profit factor</div><div class="value num o-skel" id="pf">–</div><div class="hint">above 1 makes money</div></div></div>
+                <div class="col-6"><div class="o-stat"><div class="label">Max drawdown</div><div class="value num o-skel" id="dd">–</div></div></div>
             </div>
         </div>
     </div>
@@ -59,15 +65,15 @@
             <div class="d-flex justify-content-between flex-wrap gap-3 mb-2">
                 <div>
                     <div class="o-card-title mb-1">Balance</div>
-                    <div class="o-big num" id="balance">–</div>
-                    <div class="small text-2 num" id="start-info"></div>
+                    <div class="o-big num o-skel" id="balance">–</div>
+                    <div class="small text-2 num" id="start-info">&nbsp;</div>
                 </div>
                 <div class="d-flex gap-4 text-end">
-                    <div><div class="small text-2">Total P&amp;L</div><div class="fs-5 fw-semibold num" id="total-pnl">–</div></div>
-                    <div><div class="small text-2">Cash</div><div class="fs-5 fw-semibold num" id="cash">–</div></div>
+                    <div><div class="small text-2">Total P&amp;L</div><div class="fs-5 fw-semibold num o-skel" id="total-pnl">–</div></div>
+                    <div><div class="small text-2">Cash</div><div class="fs-5 fw-semibold num o-skel" id="cash">–</div></div>
                 </div>
             </div>
-            <div id="curve"></div>
+            <div id="curve"><div class="o-skel w-100" style="height:230px"></div></div>
         </div>
     </div>
 
@@ -75,8 +81,9 @@
         <div class="o-card">
             <div class="o-card-head">
                 <h2 class="o-card-title">Agent pipeline</h2>
-                <span class="small muted">each setup runs left to right</span>
+                <span class="small muted" id="cycle-text">each setup runs left to right</span>
             </div>
+            <div class="o-bar mb-3" id="cycle-bar" title="Time until the next scan"><span style="width:0"></span></div>
             <div class="row g-2" id="pipeline"></div>
         </div>
     </div>
@@ -89,7 +96,7 @@
                     <span class="tag tag-SKIP">SKIP</span><span class="tag tag-WAIT">WAIT</span></div>
             </div>
             <div class="o-scroll feed">
-                <table class="o-table mono" style="font-size:.78rem"><tbody id="calls"></tbody></table>
+                <table class="o-table mono" style="font-size:.78rem"><tbody id="calls"><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr></tbody></table>
             </div>
         </div>
     </div>
@@ -99,7 +106,7 @@
             <div class="o-scroll">
                 <table class="o-table">
                     <thead><tr><th>Pair</th><th class="text-end">Entry</th><th class="text-end">Last</th><th class="text-end">Size</th><th class="text-end">P&amp;L</th></tr></thead>
-                    <tbody id="positions"></tbody>
+                    <tbody id="positions"><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -107,7 +114,7 @@
             <div class="d-flex align-items-center gap-3">
                 <div class="o-logo" style="width:44px;height:44px;border-radius:12px"><i class="bi bi-journal-text fs-5"></i></div>
                 <div>
-                    <div class="o-big num" id="events">0</div>
+                    <div class="o-big num o-skel" id="events">0</div>
                     <div class="small text-2">events logged, every agent call with its reason</div>
                 </div>
             </div>
@@ -121,7 +128,7 @@
                 <table class="o-table">
                     <thead><tr><th>Pair</th><th>Closed</th><th class="text-end">Entry</th><th class="text-end">Exit</th>
                         <th class="text-end">Slippage</th><th class="text-end">Fees</th><th>Reason</th><th class="text-end">P&amp;L</th></tr></thead>
-                    <tbody id="trades"></tbody>
+                    <tbody id="trades"><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -136,80 +143,172 @@ const $ = id => document.getElementById(id);
 const ICONS = {'SCAN': 'bi-radar', 'VOLUME': 'bi-bar-chart-line', 'RISK CHECK': 'bi-shield-check',
                'SIZE': 'bi-sliders', 'EXECUTE': 'bi-lightning-charge', 'LOG': 'bi-journal-text'};
 const clock = t => t ? new Date(t).toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'}) : '';
+const fixed2 = v => v == null ? '–' : v.toFixed(2);
+const int = v => v == null ? '–' : Math.round(v).toLocaleString();
+let state = null;
+let lastCallId = null;
+let lastTradeId = null;
+let curveKey = null;
 
-function render(s) {
+function renderStatus() {
+    const s = state;
+    const label = !s.running ? 'stopped' : s.cycling ? 'scanning…' : 'running';
     $('status').className = 'o-pill' + (s.running ? ' live' : '');
-    $('status').innerHTML = `<span class="dot"></span>${s.running ? 'running' : 'stopped'}`;
+    O.setHTML($('status'), (s.cycling ? '<span class="spinner-border spinner-border-sm" style="width:.7rem;height:.7rem"></span>'
+                                      : '<span class="dot"></span>') + label);
     $('start').classList.toggle('d-none', s.running);
     $('stop').classList.toggle('d-none', !s.running);
-    $('error').classList.toggle('d-none', !s.error);
-    $('error').textContent = s.error ? 'Last cycle failed: ' + s.error : '';
+}
 
-    const st = s.stats;
-    $('winrate').textContent = O.pct(st.win_rate);
-    $('ring').setAttribute('stroke-dasharray', `${(st.win_rate || 0) * 351.86} 351.86`);
-    $('wins').textContent = st.wins;
-    $('losses').textContent = st.losses;
-    $('closes').textContent = `${st.closes} closed trades`;
-    $('avg-win').textContent = O.money(st.avg_win);
-    $('avg-loss').textContent = O.money(st.avg_loss);
-    $('pf').textContent = st.profit_factor == null ? '–' : st.profit_factor.toFixed(2);
-    $('dd').textContent = O.pct(st.max_drawdown);
+// counts down to the next scan between updates
+function tick() {
+    if (!state) return;
+    const bar = $('cycle-bar').firstElementChild;
+    if (!state.running) {
+        bar.style.width = '0';
+        $('cycle-bar').classList.remove('indeterminate');
+        $('cycle-text').textContent = 'each setup runs left to right';
+    } else if (state.cycling || !state.last_cycle) {
+        $('cycle-bar').classList.add('indeterminate');
+        $('cycle-text').textContent = 'scanning pairs now…';
+    } else {
+        $('cycle-bar').classList.remove('indeterminate');
+        const left = Math.max(0, state.cycle_seconds - (Date.now() / 1000 - state.last_cycle));
+        bar.style.width = (100 * (1 - left / state.cycle_seconds)) + '%';
+        $('cycle-text').textContent = left > 0.5 ? `next scan in ${Math.ceil(left)}s` : 'scanning pairs now…';
+    }
+}
 
-    $('balance').textContent = O.money(s.balance);
-    $('start-info').textContent = `started with ${O.money(s.start_balance)} on ${O.date(s.started)}`;
-    $('total-pnl').textContent = O.signed(st.total_pnl);
-    $('total-pnl').className = 'fs-5 fw-semibold num ' + O.cls(st.total_pnl);
-    $('cash').textContent = O.money(s.cash);
-
+function renderPipeline(s) {
+    const grid = $('pipeline');
+    if (!grid.children.length) {
+        grid.innerHTML = s.pipeline.map((p, i) => `
+            <div class="col-6 col-md-4 col-xl-2"><div class="stage" data-i="${i}">
+                <div class="d-flex justify-content-between"><span class="step">STEP ${i + 1}</span><i class="bi ${ICONS[p.name] || 'bi-circle'}"></i></div>
+                <div class="name">${O.esc(p.name.charAt(0) + p.name.slice(1).toLowerCase())}</div>
+                <div class="sub">${O.esc(p.label)}</div>
+                <div class="last"></div>
+            </div></div>`).join('');
+    }
     const lastIndex = s.pipeline.reduce((m, p, i) => p.symbol ? i : m, -1);
-    $('pipeline').innerHTML = s.pipeline.map((p, i) => `
-        <div class="col-6 col-md-4 col-xl-2"><div class="stage ${i === lastIndex ? 'active' : ''}">
-            <div class="d-flex justify-content-between"><span class="step">STEP ${i + 1}</span><i class="bi ${ICONS[p.name] || 'bi-circle'}"></i></div>
-            <div class="name">${O.esc(p.name.charAt(0) + p.name.slice(1).toLowerCase())}</div>
-            <div class="sub">${O.esc(p.label)}</div>
-            <div class="last" title="${O.esc(p.detail)}">${p.action ? `<span class="tag tag-${O.esc(p.action)}">${O.esc(p.action)}</span> ${O.esc(p.symbol || p.detail)}` : '<span class="muted">waiting</span>'}</div>
-        </div></div>`).join('');
+    s.pipeline.forEach((p, i) => {
+        const card = grid.querySelector(`[data-i="${i}"]`);
+        card.classList.toggle('active', i === lastIndex);
+        const last = card.querySelector('.last');
+        last.title = p.detail || '';
+        O.setHTML(last, p.action ? `<span class="tag tag-${O.esc(p.action)}">${O.esc(p.action)}</span> ${O.esc(p.symbol || p.detail)}`
+                                 : '<span class="muted">waiting</span>');
+        if (card._event !== undefined && card._event !== p.event_id) {
+            card.classList.remove('pulse'); void card.offsetWidth; card.classList.add('pulse');
+        }
+        card._event = p.event_id;
+    });
+}
 
-    $('calls').innerHTML = s.calls.length ? s.calls.map(e => `<tr>
+function renderCalls(s) {
+    const body = $('calls');
+    if (!s.calls.length) {
+        O.setHTML(body, '<tr><td class="o-empty"><i class="bi bi-hourglass"></i>No calls yet. Press Start to run the agents.</td></tr>');
+        lastCallId = null;
+        return;
+    }
+    const row = (e, isNew) => `<tr class="${isNew ? 'o-new' : ''}">
         <td class="muted">${clock(e.time)}</td><td><span class="tag tag-${O.esc(e.action)}">${O.esc(e.action)}</span></td>
         <td>${O.esc(e.agent)}</td><td class="fw-semibold">${O.esc(e.symbol || '')}</td>
-        <td class="${e.action === 'EXIT' ? (e.detail.startsWith('-') ? 'neg' : 'pos') : 'text-2'}">${O.esc(e.detail)}</td></tr>`).join('')
-        : '<tr><td class="o-empty"><i class="bi bi-hourglass"></i>No calls yet. Press Start to run the agents.</td></tr>';
+        <td class="${e.action === 'EXIT' ? (e.detail.startsWith('-') ? 'neg' : 'pos') : 'text-2'}">${O.esc(e.detail)}</td></tr>`;
+    const known = lastCallId != null && s.calls.some(e => e.id === lastCallId);
+    if (!known) {
+        // first load or after a reset: draw the whole feed
+        O.setHTML(body, s.calls.map(e => row(e, false)).join(''));
+    } else {
+        // only add the new calls on top, so the feed doesn't jump
+        const fresh = s.calls.filter(e => e.id > lastCallId);
+        if (fresh.length) {
+            body.insertAdjacentHTML('afterbegin', fresh.map(e => row(e, true)).join(''));
+            while (body.rows.length > s.calls.length) body.deleteRow(-1);
+            body._html = null;
+        }
+    }
+    lastCallId = s.calls[0].id;
+}
 
+function renderTables(s) {
     $('open-count').textContent = `${s.positions.length} of ${s.config.max_open_positions}`;
-    $('positions').innerHTML = s.positions.length ? s.positions.map(p => {
+    O.setHTML($('positions'), s.positions.length ? s.positions.map(p => {
         const pnl = p.units * p.last - p.cost - p.fees;
         return `<tr><td class="fw-semibold">${O.esc(p.symbol)}</td><td class="text-end">${O.price(p.entry_price)}</td>
             <td class="text-end">${O.price(p.last)}</td><td class="text-end">${O.money(p.cost)}</td>
             <td class="text-end fw-semibold ${O.cls(pnl)}">${O.signed(pnl)}</td></tr>`;
-    }).join('') : '<tr><td colspan="5" class="o-empty">No open positions</td></tr>';
+    }).join('') : '<tr><td colspan="5" class="o-empty">No open positions</td></tr>');
 
-    $('events').textContent = s.events_logged.toLocaleString();
-
-    $('trades').innerHTML = s.trades.length ? s.trades.map(t => `<tr>
+    const newest = s.trades.length ? s.trades[0].id : null;
+    O.setHTML($('trades'), s.trades.length ? s.trades.map(t => `<tr class="${lastTradeId != null && t.id > lastTradeId ? 'o-new' : ''}">
         <td class="fw-semibold">${O.esc(t.symbol)}</td><td class="text-2">${O.date(t.exit_time)}</td>
         <td class="text-end">${O.price(t.entry_price)}</td><td class="text-end">${O.price(t.exit_price)}</td>
         <td class="text-end">${O.pct(t.slippage, 2)}</td><td class="text-end">${O.money(t.fees)}</td><td>${O.esc(t.reason)}</td>
         <td class="text-end fw-semibold ${O.cls(t.pnl)}">${O.signed(t.pnl)}</td></tr>`).join('')
-        : '<tr><td colspan="8" class="o-empty">No closed trades yet</td></tr>';
-
-    O.lineChart($('curve'), [{name: 'Balance', color: 'var(--o-accent)',
-        points: s.equity_curve.map(p => ({t: p.time, v: p.value}))}],
-        {height: 230, empty: 'The balance curve fills in as cycles run'});
+        : '<tr><td colspan="8" class="o-empty">No closed trades yet</td></tr>');
+    lastTradeId = newest;
 }
 
-const load = () => O.getJSON('/api/agents/state').then(render);
-const post = path => O.postJSON(path).then(load).catch(e => alert(e.message));
+function render(s) {
+    state = s;
+    renderStatus();
+    tick();
+    $('error').classList.toggle('d-none', !s.error);
+    $('error').textContent = s.error ? 'Last scan failed: ' + s.error : '';
 
-$('start').onclick = () => post('/api/agents/start');
-$('stop').onclick = () => post('/api/agents/stop');
-$('reset').onclick = () => {
-    if (confirm('Clear all paper trades and the event log and start over?')) post('/api/agents/reset');
+    const st = s.stats;
+    O.tween($('winrate'), st.win_rate == null ? null : st.win_rate * 100, v => v == null ? '–' : v.toFixed(1) + '%');
+    $('ring').setAttribute('stroke-dasharray', `${(st.win_rate || 0) * 351.86} 351.86`);
+    O.tween($('wins'), st.wins, int);
+    O.tween($('losses'), st.losses, int);
+    $('closes').textContent = `${st.closes} closed trades`;
+    O.tween($('avg-win'), st.avg_win, v => O.money(v));
+    O.tween($('avg-loss'), st.avg_loss, v => O.money(v));
+    O.tween($('pf'), st.profit_factor, fixed2);
+    O.tween($('dd'), st.max_drawdown == null ? null : st.max_drawdown * 100, v => v == null ? '–' : v.toFixed(1) + '%');
+
+    O.tween($('balance'), s.balance, v => O.money(v));
+    $('start-info').textContent = `started with ${O.money(s.start_balance)} on ${O.date(s.started)}`;
+    O.tween($('total-pnl'), st.total_pnl, v => O.signed(v));
+    $('total-pnl').classList.toggle('pos', st.total_pnl > 0);
+    $('total-pnl').classList.toggle('neg', st.total_pnl < 0);
+    O.tween($('cash'), s.cash, v => O.money(v));
+    O.tween($('events'), s.events_logged, int);
+
+    renderPipeline(s);
+    renderCalls(s);
+    renderTables(s);
+
+    // the chart only redraws when a new point arrives
+    const curve = s.equity_curve;
+    const key = curve.length + ':' + (curve.length ? curve[curve.length - 1].value : '');
+    if (key !== curveKey) {
+        curveKey = key;
+        O.lineChart($('curve'), [{name: 'Balance', color: 'var(--o-accent)',
+            points: curve.map(p => ({t: p.time, v: p.value}))}],
+            {height: 230, empty: 'The balance curve fills in as scans run'});
+    }
+    O.ready();
+}
+
+const load = (quiet = true) => O.getJSON('/api/agents/state', {quiet}).then(render);
+const post = (btn, path) => O.withSpinner(btn, () => O.postJSON(path)).then(() => load()).catch(e => alert(e.message));
+
+$('start').onclick = e => post(e.currentTarget, '/api/agents/start');
+$('stop').onclick = e => post(e.currentTarget, '/api/agents/stop');
+$('reset').onclick = e => {
+    if (confirm('Clear all paper trades and the event log and start over?')) post(e.currentTarget, '/api/agents/reset');
 };
 
-load();
-if (window.io) io().on('agent_state', render);
+load(false);
+if (window.io) {
+    const socket = io();
+    socket.on('agent_state', render);
+    socket.on('agent_cycle', () => { if (state) { state.cycling = true; renderStatus(); tick(); } });
+}
+setInterval(tick, 1000);
 // fallback in case the socket drops or its script didn't load
 setInterval(load, 30000);
 </script>

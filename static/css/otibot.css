@@ -20,6 +20,7 @@
     --o-info-soft: rgba(124, 140, 255, .16);
     --o-grid: #20273a;
     --o-shadow: 0 1px 0 rgba(255, 255, 255, .02), 0 8px 24px rgba(0, 0, 0, .25);
+    --o-shimmer: rgba(255, 255, 255, .06);
     --bs-body-bg: var(--o-bg);
     --bs-body-color: var(--o-text);
     --bs-border-color: var(--o-border);
@@ -47,6 +48,7 @@
     --o-info-soft: rgba(76, 91, 212, .1);
     --o-grid: #e8ebf1;
     --o-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 4px 16px rgba(16, 24, 40, .05);
+    --o-shimmer: rgba(255, 255, 255, .7);
     --bs-body-bg: var(--o-bg);
     --bs-body-color: var(--o-text);
     --bs-border-color: var(--o-border);
@@ -200,3 +202,35 @@ a { color: var(--o-accent); }
 }
 .score-bar { height: 6px; background: var(--o-surface-2); border-radius: 3px; width: 56px; display: inline-block; vertical-align: middle; margin-right: 6px; }
 .score-bar span { display: block; height: 100%; border-radius: 3px; background: var(--o-good); }
+
+/* loading */
+#o-progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 2000; pointer-events: none; overflow: hidden; opacity: 0; transition: opacity .3s; }
+#o-progress::before { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; background: var(--o-accent); border-radius: 2px; animation: o-indeterminate 1.1s ease-in-out infinite; }
+.o-loading #o-progress { opacity: 1; }
+@keyframes o-indeterminate { from { left: -40%; } to { left: 100%; } }
+
+.o-skel { position: relative; color: transparent !important; background: var(--o-surface-2) !important; border-radius: 6px; overflow: hidden; min-width: 3.5em; display: inline-block; }
+.o-skel * { visibility: hidden; }
+.o-skel::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, var(--o-shimmer), transparent); animation: o-shimmer 1.3s infinite; }
+@keyframes o-shimmer { to { transform: translateX(100%); } }
+.o-skel-row td span { display: block; height: .8em; margin: .2em 0; }
+
+.o-dim { opacity: .45; pointer-events: none; transition: opacity .2s; }
+.o-fade { transition: opacity .2s; }
+
+/* gentle highlights when something updates */
+.o-flash { animation: o-flash .9s ease-out; }
+@keyframes o-flash { from { text-shadow: 0 0 14px var(--o-accent); } to { text-shadow: none; } }
+.o-new td { animation: o-row-in .6s ease-out; }
+@keyframes o-row-in { from { background: var(--o-accent-soft); opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+.o-bar { height: 6px; border-radius: 3px; background: var(--o-surface-2); overflow: hidden; }
+.o-bar > span { display: block; height: 100%; background: var(--o-accent); border-radius: 3px; transition: width .6s ease; }
+.o-bar.indeterminate > span { width: 30% !important; animation: o-bar-slide 1.2s ease-in-out infinite; }
+@keyframes o-bar-slide { from { margin-left: -30%; } to { margin-left: 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .o-skel::after, #o-progress::before, .o-flash, .o-new td, .o-bar.indeterminate > span { animation: none; }
+}
+.o-stat .o-skel, .o-card .o-stat .o-skel { background: var(--o-border) !important; }

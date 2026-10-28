@@ -14,9 +14,9 @@
         <div class="o-card py-3">
             <div class="d-flex justify-content-between align-items-center">
                 <span class="fw-semibold">{{ symbol }}<span class="muted fw-normal">/USD</span></span>
-                <span class="small num" data-change="{{ symbol }}">–</span>
+                <span class="small num o-skel" data-change="{{ symbol }}">–</span>
             </div>
-            <div class="fs-4 fw-bold num mt-1" data-price="{{ symbol }}">–</div>
+            <div class="fs-4 fw-bold num mt-1"><span class="o-skel" style="width:6em" data-price="{{ symbol }}">–</span></div>
         </div>
     </div>
     {% endfor %}
@@ -33,16 +33,16 @@
             <div class="d-flex flex-wrap align-items-end justify-content-between gap-3">
                 <div>
                     <div class="small text-2">Paper balance</div>
-                    <div class="o-big num" id="agent-balance">–</div>
+                    <div class="o-big num o-skel" id="agent-balance">–</div>
                     <div class="small num" id="agent-pnl"></div>
                 </div>
-                <div class="flex-grow-1" style="min-width: 220px; max-width: 420px" id="agent-spark"></div>
+                <div class="flex-grow-1" style="min-width: 220px; max-width: 420px" id="agent-spark"><div class="o-skel w-100" style="height:70px"></div></div>
             </div>
             <div class="row g-2 mt-3">
-                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Win rate</div><div class="value num" id="agent-winrate">–</div><div class="hint" id="agent-closes"></div></div></div>
-                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Profit factor</div><div class="value num" id="agent-pf">–</div><div class="hint">wins ÷ losses</div></div></div>
-                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Max drawdown</div><div class="value num" id="agent-dd">–</div></div></div>
-                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Open positions</div><div class="value num" id="agent-open">–</div></div></div>
+                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Win rate</div><div class="value num o-skel" id="agent-winrate">–</div><div class="hint" id="agent-closes"></div></div></div>
+                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Profit factor</div><div class="value num o-skel" id="agent-pf">–</div><div class="hint">wins ÷ losses</div></div></div>
+                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Max drawdown</div><div class="value num o-skel" id="agent-dd">–</div></div></div>
+                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Open positions</div><div class="value num o-skel" id="agent-open">–</div></div></div>
             </div>
             <div class="mt-auto pt-3 d-flex justify-content-between align-items-center">
                 <span class="small muted" id="agent-last"></span>
@@ -74,7 +74,7 @@
                 <table class="o-table">
                     <thead><tr><th>Symbol</th><th>Name</th><th>Type</th><th>Score</th><th class="text-end">Yield</th>
                         <th class="text-end">Div growth 5y</th><th class="text-end">Years raised</th><th class="text-end">Total return 5y</th></tr></thead>
-                    <tbody id="picks"><tr><td colspan="8" class="o-empty">Loading…</td></tr></tbody>
+                    <tbody id="picks"><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr></tbody>
                 </table>
             </div>
             <div class="small muted mt-2" id="picks-updated"></div>
@@ -87,9 +87,9 @@
 <script>
 const $ = id => document.getElementById(id);
 
-async function loadMarket() {
+async function loadMarket(quiet = false) {
     try {
-        const data = await O.getJSON('/api/market');
+        const data = await O.getJSON('/api/market', {quiet});
         $('market-error').classList.add('d-none');
         data.forEach(m => {
             document.querySelector(`[data-price="${m.symbol}"]`).textContent = O.money(m.price, m.price < 10 ? 4 : 2);
@@ -97,17 +97,19 @@ async function loadMarket() {
             ch.textContent = O.signedPct(m.change, 2);
             ch.className = 'small num fw-semibold ' + O.cls(m.change);
         });
+        O.ready($('market'));
     } catch (e) {
         $('market-error').classList.remove('d-none');
+        O.ready($('market'));
     }
 }
 
-async function loadAgents() {
-    const s = await O.getJSON('/api/agents/state');
+async function loadAgents(quiet = false) {
+    const s = await O.getJSON('/api/agents/state', {quiet});
     const st = s.stats;
     $('agent-status').className = 'o-pill' + (s.running ? ' live' : '');
     $('agent-status').innerHTML = `<span class="dot"></span>${s.running ? 'running' : 'stopped'} · paper`;
-    $('agent-balance').textContent = O.money(s.balance);
+    O.tween($('agent-balance'), s.balance, v => O.money(v));
     const pnl = s.balance - s.start_balance;
     $('agent-pnl').innerHTML = `<span class="${O.cls(pnl)} fw-semibold">${O.signed(pnl)}</span>
         <span class="muted">(${O.signedPct(pnl / s.start_balance, 2)}) since ${O.day(s.started)}</span>`;
@@ -120,6 +122,7 @@ async function loadAgents() {
     $('agent-last').textContent = last ? `Last call ${O.date(last.time)}: ${last.agent} ${last.action.toLowerCase()}` : 'Press Start on the dashboard to begin';
     O.lineChart($('agent-spark'), [{name: 'Balance', color: 'var(--o-accent)',
         points: s.equity_curve.map(p => ({t: p.time, v: p.value}))}], {height: 70, spark: true, empty: '<span class="small">curve fills in as agents run</span>'});
+    O.ready($('agent-balance').closest('.o-card'));
 }
 
 async function loadBacktest() {
@@ -157,7 +160,7 @@ async function loadPicks() {
 }
 
 loadMarket(); loadAgents(); loadBacktest(); loadPicks();
-setInterval(loadAgents, 15000);
-setInterval(loadMarket, 30000);
+setInterval(() => loadAgents(true), 15000);
+setInterval(() => loadMarket(true), 30000);
 </script>
 {% endblock %}
