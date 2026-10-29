@@ -6,15 +6,29 @@
 <a href="/agents" class="btn btn-ghost"><i class="bi bi-robot me-1"></i> Agents</a>
 {% endblock %}
 
+{% block styles %}
+<style>
+    .o-help { display: none; font-size: .78rem; line-height: 1.4; color: var(--o-muted); margin-top: 4px; }
+    #form.show-help .o-help { display: block; }
+    .form-switch .o-help { margin-left: 0; }
+    /* each field gets the full width while its explanation shows */
+    #form.show-help .row > .col-6 { flex: 0 0 100%; max-width: 100%; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row g-3">
     <div class="col-lg-4 col-xl-3">
-        <form class="o-card" id="form" autocomplete="off">
+        <form class="o-card show-help" id="form" autocomplete="off">
+            <div class="d-flex justify-content-end mb-2">
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-2" id="help-toggle"><i class="bi bi-question-circle me-1"></i><span>Hide help</span></button>
+            </div>
             <div class="d-flex gap-1 mb-1">
                 <button type="button" class="btn btn-ghost btn-sm flex-fill px-1" data-preset="recommended" title="Every new rule on">Recommended</button>
                 <button type="button" class="btn btn-ghost btn-sm flex-fill px-1" data-preset="live" title="What the agents use now">Live</button>
                 <button type="button" class="btn btn-ghost btn-sm flex-fill px-1" data-preset="baseline" title="The rules before these changes">Original</button>
             </div>
+            <div class="o-help" data-help-for="presets"></div>
 
             <div class="o-section">Cut costs</div>
             <div class="form-check form-switch">
@@ -167,6 +181,46 @@ const $ = id => document.getElementById(id);
 const form = $('form');
 let presets = {}, poll;
 
+// what each setting does, shown under it while help is on
+const HELP = {
+    presets: 'Recommended turns every new rule on. Live loads what your agents use now. Original loads the rules from before these changes.',
+    limit_orders: 'Buys with a limit order at the current bid instead of paying the ask. Kraken charges 0.25% instead of 0.40% and there is no slippage. The catch: if the price keeps rising, the order never fills and is cancelled after 5 minutes. Take profit also waits as a limit order. Stop losses still sell at market, so they always get out.',
+    trail_covers_costs: 'The trailing stop normally turns on as soon as a trade is up by "Trail after up". With this on, it waits until the stop would sell above the entry price plus fees, so a trailing stop exit is never a loss.',
+    confirm_spike: 'Instead of buying as soon as a spike candle closes, waits for the next 5-minute candle and only buys if it held at least half of the spike\'s gain. Filters out spikes that reverse right away, for a slightly later entry.',
+    market_filter: 'Skips new buys while BTC trades below its price at midnight UTC. Most coins fall with BTC, so this avoids buying into a falling market. Open trades are still managed as normal.',
+    max_entry_move: 'Skips a spike if that one candle already rose more than this. Big jumps often pull back, so buying right after one usually means buying the top. 0 turns this off.',
+    min_spike: 'How unusual volume must be to count as a spike: the candle\'s volume divided by the median of the 24 candles before it (2 hours). 3 means three times normal. Higher means fewer, stronger signals.',
+    take_profit: 'Sells once a trade is up this much from its entry price, before fees.',
+    stop_loss: 'Sells once a trade is down this much from its entry price. Fees and slippage come on top, so the real loss is a little bigger.',
+    trail_trigger: 'Once a trade has been up this much, a trailing stop turns on to protect the gain.',
+    trail_pct: 'While the trailing stop is on, sells if the price drops this far below the highest price since entry.',
+    stale_minutes: 'Closes a trade that hasn\'t gained at least "Flat is under" after this many minutes, freeing the cash and the slot for a better setup. 0 turns this off.',
+    stale_move: 'The gain a trade needs by "Flat after" to stay open. Trades below it, including ones that are down, are closed.',
+    max_hold_minutes: 'Sells any trade still open after this long, whatever its price.',
+    max_open_positions: 'Most trades open at once, counting limit buys waiting to fill. New spikes are skipped while every slot is full.',
+    max_position_pct: 'The most of the account one trade can use.',
+    spread: 'Backtest only. Past candles don\'t record the gap between the buy and sell price, so the backtest assumes this one, and each market order pays half of it. Big coins are usually 0.01 to 0.05%, small ones 0.1 to 0.5%.',
+};
+
+function addHelp() {
+    for (const [name, text] of Object.entries(HELP)) {
+        const el = form.elements[name];
+        const target = name === 'presets' ? document.querySelector('[data-help-for=presets]') : null;
+        if (target) { target.textContent = text; continue; }
+        if (!el) continue;
+        const help = document.createElement('div');
+        help.className = 'o-help';
+        help.textContent = text;
+        (el.closest('.form-check') || el).after(help);
+    }
+}
+
+function showHelp(on) {
+    form.classList.toggle('show-help', on);
+    $('help-toggle').querySelector('span').textContent = on ? 'Hide help' : 'Show help';
+    try { localStorage.setItem('otibot-tune-help', on ? '1' : '0'); } catch (e) {}
+}
+
 // percent fields hold fractions on the server
 function fill(values) {
     for (const [k, v] of Object.entries(values)) {
@@ -271,6 +325,12 @@ $('apply').onclick = () => O.withSpinner($('apply'), async () => {
     $('apply-note').innerHTML = `<i class="bi bi-check-circle-fill pos me-1"></i>` +
         (n ? `${n} setting${n > 1 ? 's' : ''} changed. The live agents use them from their next scan.` : 'The live agents already use these settings.');
 });
+
+addHelp();
+let helpOn = true;
+try { helpOn = localStorage.getItem('otibot-tune-help') !== '0'; } catch (e) {}
+showHelp(helpOn);
+$('help-toggle').onclick = () => showHelp(!form.classList.contains('show-help'));
 
 O.getJSON('/api/agents/settings').then(s => {
     presets = s;
