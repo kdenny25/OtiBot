@@ -5,6 +5,8 @@ import time as _time
 
 import numpy as np
 
+from agent_module.rules import PASS, describe, exit_reason, spike_signals
+
 
 class ScanAgent:
     """ Picks the most traded USD pairs and notices new listings. """
@@ -58,7 +60,10 @@ def volume_spike(candles, lookback):
 
 
 class VolumeAgent:
-    """ Passes pairs whose last candle traded far above normal and closed green. """
+    """
+    Passes pairs whose last candle traded far above normal and closed green,
+    and with the stricter settings on, hadn't already run up and held its gain.
+    """
     name = 'VOLUME'
 
     def __init__(self, config, market, store):
@@ -70,15 +75,15 @@ class VolumeAgent:
         passed = []
         for pair in pairs:
             candles = self.market.candles(pair, self.config.candle_interval)
-            spike = volume_spike(candles, self.config.spike_lookback)
-            if spike < self.config.min_spike:
+            if len(candles) < self.config.spike_lookback + 2:
                 continue
-            last = candles.iloc[-1]
-            if last['close'] <= last['open']:
-                self.store.log(now, self.name, 'SKIP', names[pair], f'spike {spike:.1f}x on a red candle')
+            row = spike_signals(candles, self.config).iloc[-1]
+            if row['signal'] is None:
                 continue
-            self.store.log(now, self.name, 'PASS', names[pair], f'spike {spike:.1f}x')
-            passed.append(pair)
+            self.store.log(now, self.name, 'PASS' if row['signal'] == PASS else 'SKIP',
+                           names[pair], describe(row, self.config))
+            if row['signal'] == PASS:
+                passed.append(pair)
 
         if not passed:
             self.store.log(now, self.name, 'WAIT', None, f'no spikes over {self.config.min_spike:g}x')
@@ -121,12 +126,12 @@ class SizeAgent:
 
     def run(self, now, name, broker, equity):
         c = self.config
-        if len(broker.positions) >= c.max_open_positions:
+        if len(broker.positions) + len(broker.orders) >= c.max_open_positions:
             self.store.log(now, self.name, 'SKIP', name, f'{c.max_open_positions} positions already open')
             return 0.0
         value = min(equity * c.risk_per_trade / c.stop_loss,
                     equity * c.max_position_pct,
-                    broker.cash / (1 + c.taker_fee))
+                    broker.free_cash() / (1 + c.taker_fee))
         if value < self.min_order:
             self.store.log(now, self.name, 'SKIP', name, f'${value:,.2f} is below the minimum order')
             return 0.0
@@ -135,7 +140,10 @@ class SizeAgent:
 
 
 class ExecuteAgent:
-    """ Places paper orders and closes them on take profit, stop, trailing stop or time. """
+    """
+    Places paper orders and closes them on take profit, stop, trailing stop,
+    a trade that went nowhere, or time.
+    """
     name = 'EXECUTE'
 
     def __init__(self, config, store, broker):
@@ -144,25 +152,27 @@ class ExecuteAgent:
         self.broker = broker
 
     def enter(self, now, now_ts, pair, name, ticker, value):
+        if self.config.limit_orders:
+            order = self.broker.place_limit_buy(now, now_ts, pair, name, ticker['bid'], value)
+            self.store.log(now, self.name, 'WAIT', name,
+                           f'limit buy ${value:,.2f} @ {order["price"]:.8g}')
+            return
         pos = self.broker.buy(now, now_ts, pair, name, ticker, value)
         self.store.log(now, self.name, 'ENTER', name,
                        f'${value:,.2f} @ {pos["entry_price"]:.8g}')
 
     def exit_reason(self, pos, bid, now_ts):
-        c = self.config
-        change = bid / pos['entry_price'] - 1
-        if change <= -c.stop_loss:
-            return 'stop loss'
-        if change >= c.take_profit:
-            return 'take profit'
-        if pos['peak'] / pos['entry_price'] - 1 >= c.trail_trigger and \
-                bid <= pos['peak'] * (1 - c.trail_pct):
-            return 'trailing stop'
-        if now_ts - pos['entry_ts'] >= c.max_hold_minutes * 60:
-            return 'time limit'
-        return None
+        return exit_reason(pos, bid, now_ts, self.config)
 
     def manage(self, now, now_ts, tickers):
+        filled, cancelled = self.broker.check_orders(now, now_ts, tickers)
+        for pair, pos in filled:
+            self.store.log(now, self.name, 'ENTER', pos['symbol'],
+                           f'limit filled ${pos["cost"]:,.2f} @ {pos["entry_price"]:.8g}')
+        for pair, order in cancelled:
+            self.store.log(now, self.name, 'SKIP', order['symbol'],
+                           f'limit not filled in {self.config.limit_wait_minutes} min, cancelled')
+
         for pair, pos in list(self.broker.positions.items()):
             ticker = tickers.get(pair)
             if ticker is None:
@@ -170,7 +180,10 @@ class ExecuteAgent:
             self.broker.mark(pair, ticker['bid'])
             reason = self.exit_reason(pos, ticker['bid'], now_ts)
             if reason:
-                trade = self.broker.sell(now, pair, ticker, reason)
+                # a take profit rests on the book as a limit sell, so it fills at its price
+                limit = pos['entry_price'] * (1 + self.config.take_profit) \
+                    if reason == 'take profit' and self.config.limit_orders else None
+                trade = self.broker.sell(now, pair, ticker, reason, limit=limit)
                 sign = '+' if trade['pnl'] >= 0 else '-'
                 self.store.log(now, self.name, 'EXIT', pos['symbol'],
                                f'{sign}${abs(trade["pnl"]):,.2f} {reason}')

@@ -9,6 +9,7 @@ from agent_module.agents import (ScanAgent, VolumeAgent, RiskAgent, SizeAgent,
                                  ExecuteAgent, LogAgent)
 from agent_module.broker import PaperBroker
 from agent_module.config import AgentConfig
+from agent_module.rules import market_ok
 from agent_module.store import Store
 
 AGENTS = [('SCAN', 'new pairs'), ('VOLUME', 'volume spikes'), ('RISK CHECK', 'filters thin pairs'),
@@ -21,9 +22,11 @@ def now_iso():
 
 class Pipeline:
     def __init__(self, market, store=None, config=None):
-        self.config = config or AgentConfig()
         self.market = market
         self.store = store or Store()
+        self.config = config or AgentConfig()
+        # settings chosen on the backtest page and applied to the live agents
+        self.config.update(self.store.get('config', {}))
         self.broker = PaperBroker(self.config, self.store)
         self.scan = ScanAgent(self.config, market, self.store)
         self.volume = VolumeAgent(self.config, market, self.store)
@@ -44,7 +47,10 @@ class Pipeline:
             self.execute.manage(now, now_ts, tickers)
 
             names = self.scan.pairs
-            candidates = [p for p in watched if p not in self.broker.positions]
+            if not self.market_ok(now, tickers, names):
+                self.log.run(now, self.broker.equity(tickers), len(self.broker.positions))
+                return
+            candidates = [p for p in watched if p not in self.broker.positions and p not in self.broker.orders]
             for pair in self.volume.run(now, candidates, names):
                 if not self.risk.run(now, pair, tickers[pair], names[pair]):
                     continue
@@ -57,10 +63,33 @@ class Pipeline:
             self.store.log(now, 'LOG', 'ERROR', None, str(e)[:300])
             raise
 
+    def market_ok(self, now, tickers, names):
+        """ With market_filter on, no new buys while BTC is below today's open. """
+        if not self.config.market_filter:
+            return True
+        btc = next((tickers[p] for p, n in names.items() if n in ('XBT/USD', 'BTC/USD') and p in tickers), None)
+        if btc is None or market_ok(btc['last'], btc.get('open')):
+            return True
+        self.store.log(now, 'RISK CHECK', 'WAIT', 'XBT/USD',
+                       f'BTC {btc["last"] / btc["open"] - 1:+.1%} today, no new buys')
+        return False
+
+    def apply_settings(self, values):
+        """ Changes the live settings and keeps them across restarts. Returns what changed. """
+        changed = self.config.update(values)
+        saved = self.store.get('config', {})
+        saved.update({k: getattr(self.config, k) for k in values if hasattr(self.config, k)})
+        self.store.set('config', saved)
+        return changed
+
     def reset(self):
+        settings = self.store.get('config')
         self.store.reset()
+        if settings:
+            self.store.set('config', settings)
         self.broker.cash = self.config.start_balance
         self.broker.positions = {}
+        self.broker.orders = {}
         self.store.set('started', now_iso())
         self.store.add_equity(self.store.get('started'), self.config.start_balance)
 
@@ -104,6 +133,7 @@ class Pipeline:
                 'equity_curve': curve,
                 'pipeline': pipeline,
                 'positions': [dict(pair=k, **v) for k, v in self.broker.positions.items()],
+                'orders': [dict(pair=k, **v) for k, v in self.broker.orders.items()],
                 'calls': self.store.recent_events(40),
                 'trades': trades[:20],
                 'events_logged': self.store.event_count(),
