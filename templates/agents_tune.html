@@ -1,0 +1,281 @@
+{% extends "layout.html" %}
+{% block title %}Tune agents{% endblock %}
+{% block page_title %}Tune agents{% endblock %}
+{% block page_sub %}Test agent settings on weeks of past candles, then use the winners for live paper trading.{% endblock %}
+{% block actions %}
+<a href="/agents" class="btn btn-ghost"><i class="bi bi-robot me-1"></i> Agents</a>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-4 col-xl-3">
+        <form class="o-card" id="form" autocomplete="off">
+            <div class="d-flex gap-1 mb-1">
+                <button type="button" class="btn btn-ghost btn-sm flex-fill px-1" data-preset="recommended" title="Every new rule on">Recommended</button>
+                <button type="button" class="btn btn-ghost btn-sm flex-fill px-1" data-preset="live" title="What the agents use now">Live</button>
+                <button type="button" class="btn btn-ghost btn-sm flex-fill px-1" data-preset="baseline" title="The rules before these changes">Original</button>
+            </div>
+
+            <div class="o-section">Cut costs</div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="limit_orders" id="limit_orders">
+                <label class="form-check-label small" for="limit_orders">Limit orders <span class="muted">· 0.25% maker fee, no slippage, may not fill</span></label>
+            </div>
+            <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" name="trail_covers_costs" id="trail_covers_costs">
+                <label class="form-check-label small" for="trail_covers_costs">Trailing stop only locks in profit after fees</label>
+            </div>
+
+            <div class="o-section">Better entries</div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="confirm_spike" id="confirm_spike">
+                <label class="form-check-label small" for="confirm_spike">Wait for the next candle to hold the spike</label>
+            </div>
+            <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" name="market_filter" id="market_filter">
+                <label class="form-check-label small" for="market_filter">No new buys while BTC is below today's open</label>
+            </div>
+            <div class="row g-2 mt-1">
+                <div class="col-6"><label class="form-label">Skip if up over %</label>
+                    <input class="form-control" type="number" name="max_entry_move" data-pct min="0" step="0.5" title="0 turns it off"></div>
+                <div class="col-6"><label class="form-label">Min spike ×</label>
+                    <input class="form-control" type="number" name="min_spike" min="1" step="0.5"></div>
+            </div>
+
+            <div class="o-section">Exits</div>
+            <div class="row g-2">
+                <div class="col-6"><label class="form-label">Take profit %</label>
+                    <input class="form-control" type="number" name="take_profit" data-pct min="0.5" step="0.5"></div>
+                <div class="col-6"><label class="form-label">Stop loss %</label>
+                    <input class="form-control" type="number" name="stop_loss" data-pct min="0.5" step="0.5"></div>
+                <div class="col-6"><label class="form-label">Trail after up %</label>
+                    <input class="form-control" type="number" name="trail_trigger" data-pct min="0" step="0.5"></div>
+                <div class="col-6"><label class="form-label">Trail distance %</label>
+                    <input class="form-control" type="number" name="trail_pct" data-pct min="0.5" step="0.5"></div>
+                <div class="col-6"><label class="form-label">Flat after (min)</label>
+                    <input class="form-control" type="number" name="stale_minutes" min="0" step="15" title="0 turns it off"></div>
+                <div class="col-6"><label class="form-label">Flat is under %</label>
+                    <input class="form-control" type="number" name="stale_move" data-pct min="0" step="0.25"></div>
+                <div class="col-12"><label class="form-label">Max hold (min)</label>
+                    <input class="form-control" type="number" name="max_hold_minutes" min="15" step="15"></div>
+            </div>
+
+            <div class="o-section">Size</div>
+            <div class="row g-2">
+                <div class="col-6"><label class="form-label">Max open</label>
+                    <input class="form-control" type="number" name="max_open_positions" min="1" max="20" step="1"></div>
+                <div class="col-6"><label class="form-label">Per trade %</label>
+                    <input class="form-control" type="number" name="max_position_pct" data-pct min="1" max="100" step="1"></div>
+                <div class="col-12"><label class="form-label">Assumed spread % <span class="muted fw-normal">· history has no quotes</span></label>
+                    <input class="form-control" type="number" name="spread" min="0" step="0.05" value="0.1"></div>
+            </div>
+
+            <button class="btn btn-accent w-100 mt-4" type="submit" id="run"><i class="bi bi-play-fill me-1"></i> Run backtest</button>
+        </form>
+    </div>
+
+    <div class="col-lg-8 col-xl-9">
+        <div class="o-card mb-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div>
+                    <div class="fw-semibold"><i class="bi bi-database me-1"></i> Candle history</div>
+                    <div class="small text-2" id="hist-info"><span class="o-skel" style="width:16em">&nbsp;</span></div>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <select class="form-select form-select-sm" id="days" style="width:auto">
+                        <option value="14">14 days</option><option value="30" selected>30 days</option>
+                        <option value="60">60 days</option><option value="90">90 days</option>
+                    </select>
+                    <button class="btn btn-ghost btn-sm text-nowrap" id="download"><i class="bi bi-cloud-download me-1"></i> Download</button>
+                </div>
+            </div>
+            <div class="d-none mt-3" id="hist-box">
+                <div class="d-flex justify-content-between small mb-2">
+                    <span><span class="spinner-border spinner-border-sm text-warning me-2"></span><span id="hist-text">Starting download…</span></span>
+                    <span class="muted" id="hist-pct"></span>
+                </div>
+                <div class="o-bar indeterminate" id="hist-bar"><span style="width:0"></span></div>
+            </div>
+        </div>
+
+        <div id="error" class="alert alert-danger d-none"></div>
+        <div id="empty" class="o-card">
+            <div class="o-empty py-5">
+                <i class="bi bi-sliders"></i>
+                <div class="fw-semibold text-2 mb-1">Download history, then press Run</div>
+                Each run replays the six agents over every pair, candle by candle, with fees, slippage and the spread,<br class="d-none d-md-inline">
+                and compares your settings with the original rules on the same data.
+            </div>
+        </div>
+
+        <div id="results" class="d-none">
+            <div class="o-card mb-3">
+                <div class="o-card-head flex-wrap">
+                    <div>
+                        <div class="fw-semibold">Your settings vs the original rules</div>
+                        <div class="small text-2" id="r-sub"></div>
+                    </div>
+                    <div class="o-legend">
+                        <span style="--c: var(--o-accent)">Your settings</span>
+                        <span style="--c: var(--o-series-2)">Original rules</span>
+                    </div>
+                </div>
+                <div class="o-scroll mb-3">
+                    <table class="o-table">
+                        <thead><tr><th></th><th class="text-end">Return</th><th class="text-end">Trades</th><th class="text-end">Win rate</th>
+                            <th class="text-end">Avg win</th><th class="text-end">Avg loss</th><th class="text-end">Profit factor</th>
+                            <th class="text-end">Fees paid</th><th class="text-end">Max drawdown</th></tr></thead>
+                        <tbody id="compare"></tbody>
+                    </table>
+                </div>
+                <div id="chart"></div>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 pt-3 border-top" style="border-color: var(--o-border) !important">
+                    <div class="small text-2" id="apply-note">Happy with these? The live agents switch over on their next scan.</div>
+                    <button class="btn btn-accent" id="apply"><i class="bi bi-check2-circle me-1"></i> Use for live agents</button>
+                </div>
+            </div>
+            <div class="row g-3">
+                <div class="col-xl-5">
+                    <div class="o-card h-100">
+                        <div class="o-card-head"><h2 class="o-card-title">Why trades closed</h2><span class="small muted">your settings</span></div>
+                        <table class="o-table">
+                            <thead><tr><th>Exit</th><th class="text-end">Trades</th><th class="text-end">P&amp;L</th></tr></thead>
+                            <tbody id="exits"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-xl-7">
+                    <div class="o-card h-100">
+                        <div class="o-card-head"><h2 class="o-card-title">Trades</h2><span class="small muted" id="trade-count"></span></div>
+                        <div class="o-scroll" style="max-height: 360px">
+                            <table class="o-table">
+                                <thead><tr><th>Pair</th><th>Entry</th><th>Exit</th><th>Why</th><th class="text-end">P&amp;L</th></tr></thead>
+                                <tbody id="trades"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+const form = $('form');
+let presets = {}, poll;
+
+// percent fields hold fractions on the server
+function fill(values) {
+    for (const [k, v] of Object.entries(values)) {
+        const el = form.elements[k];
+        if (!el) continue;
+        if (el.type === 'checkbox') el.checked = !!v;
+        else el.value = el.hasAttribute('data-pct') ? +(v * 100).toFixed(3) : v;
+    }
+}
+
+function read() {
+    const values = {};
+    for (const el of form.elements) {
+        if (!el.name || el.name === 'spread') continue;
+        values[el.name] = el.type === 'checkbox' ? el.checked
+            : el.hasAttribute('data-pct') ? Number(el.value) / 100 : Number(el.value);
+    }
+    return values;
+}
+
+function showHistory(h) {
+    const info = h.info;
+    $('hist-info').textContent = info
+        ? `${info.days} days of 5-minute candles for ${info.pairs.length} pairs, updated ${info.updated}` +
+          (info.missing.length ? ` · not on Coinbase: ${info.missing.join(', ')}` : '')
+        : 'Nothing downloaded yet. Pulls 5-minute candles for the most traded pairs from Coinbase.';
+    if (h.error) $('hist-info').textContent = `Last download failed: ${h.error}`;
+    $('hist-box').classList.toggle('d-none', !h.running);
+    $('download').disabled = h.running;
+    if (h.running) {
+        const bar = $('hist-bar');
+        bar.classList.toggle('indeterminate', !h.total);
+        bar.firstElementChild.style.width = h.total ? (100 * h.done / h.total) + '%' : '0';
+        $('hist-text').textContent = h.total ? `Downloading ${h.pair} (${h.done + 1} of ${h.total})` : 'Finding the most traded pairs…';
+        $('hist-pct').textContent = h.total ? Math.round(100 * h.done / h.total) + '%' : '';
+    }
+    clearTimeout(poll);
+    if (h.running) poll = setTimeout(loadHistory, 2000);
+}
+
+async function loadHistory() {
+    showHistory(await O.getJSON('/api/agents/history', {quiet: true}));
+}
+
+function row(label, r) {
+    const s = r.stats;
+    return `<tr><td class="fw-semibold">${label}</td>
+        <td class="text-end fw-semibold ${O.cls(s.total_return)}">${O.signedPct(s.total_return)}</td>
+        <td class="text-end">${s.trades}</td><td class="text-end">${O.pct(s.win_rate)}</td>
+        <td class="text-end pos">${O.signed(s.avg_win)}</td><td class="text-end neg">${O.signed(s.avg_loss)}</td>
+        <td class="text-end">${s.profit_factor == null ? '–' : s.profit_factor.toFixed(2)}</td>
+        <td class="text-end">${O.money(s.fees)}</td><td class="text-end">${O.pct(s.max_drawdown)}</td></tr>`;
+}
+
+function render(r) {
+    $('empty').classList.add('d-none');
+    $('results').classList.remove('d-none');
+    $('r-sub').textContent = `${r.pairs} pairs · ${O.day(r.start)} to ${O.day(r.end)} · $1,000 paper account`;
+    $('compare').innerHTML = row('Your settings', r.test) + row('Original rules', r.baseline);
+    O.lineChart($('chart'), [
+        {name: 'Your settings', color: 'var(--o-accent)', points: r.test.equity},
+        {name: 'Original rules', color: 'var(--o-series-2)', points: r.baseline.equity, dashed: true},
+    ], {height: 280, format: v => O.money(v, 0)});
+    $('exits').innerHTML = r.test.exits.length ? r.test.exits.sort((a, b) => b.count - a.count).map(e => `<tr>
+        <td>${O.esc(e.reason)}</td><td class="text-end">${e.count}</td>
+        <td class="text-end fw-semibold ${O.cls(e.pnl)}">${O.signed(e.pnl)}</td></tr>`).join('')
+        : '<tr><td colspan="3" class="o-empty">No trades</td></tr>';
+    $('trade-count').textContent = r.test.stats.trades > r.test.trades.length ? `latest ${r.test.trades.length} of ${r.test.stats.trades}` : '';
+    $('trades').innerHTML = r.test.trades.map(t => `<tr>
+        <td class="fw-semibold">${O.esc(t.symbol)}</td><td class="text-2">${O.date(t.entry_time)}</td>
+        <td class="text-2">${O.date(t.exit_time)}</td><td>${O.esc(t.reason)}</td>
+        <td class="text-end fw-semibold ${O.cls(t.pnl)}">${O.signed(t.pnl)}</td></tr>`).join('');
+}
+
+form.addEventListener('submit', async e => {
+    e.preventDefault();
+    $('error').classList.add('d-none');
+    $('results').classList.add('o-dim');
+    try {
+        await O.withSpinner($('run'), async () =>
+            render(await O.postJSON('/api/agents/simulate', {settings: read(), spread: Number(form.spread.value) / 100})));
+    } catch (err) {
+        $('error').textContent = err.message;
+        $('error').classList.remove('d-none');
+    } finally {
+        $('results').classList.remove('o-dim');
+    }
+});
+
+document.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => fill(presets[b.dataset.preset]));
+
+$('download').onclick = async () => {
+    showHistory({running: true, info: null});
+    try { await O.postJSON('/api/agents/history', {days: Number($('days').value)}); }
+    finally { loadHistory(); }
+};
+
+$('apply').onclick = () => O.withSpinner($('apply'), async () => {
+    const r = await O.postJSON('/api/agents/settings', read());
+    presets.live = r.live;
+    const n = Object.keys(r.changed).length;
+    $('apply-note').innerHTML = `<i class="bi bi-check-circle-fill pos me-1"></i>` +
+        (n ? `${n} setting${n > 1 ? 's' : ''} changed. The live agents use them from their next scan.` : 'The live agents already use these settings.');
+});
+
+O.getJSON('/api/agents/settings').then(s => {
+    presets = s;
+    fill(s.recommended);
+});
+loadHistory().then(() => O.ready());
+</script>
+{% endblock %}

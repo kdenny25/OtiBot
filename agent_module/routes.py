@@ -3,7 +3,10 @@ import os
 import threading
 import time
 
-from flask import Blueprint, jsonify, render_template
+from flask import Blueprint, jsonify, render_template, request
+
+from agent_module import history
+from agent_module.config import AgentConfig, BASELINE, RECOMMENDED, TUNABLE
 
 agents_bp = Blueprint('agents', __name__)
 
@@ -91,6 +94,11 @@ def agents_page():
     return render_template('agents.html')
 
 
+@agents_bp.route('/agents/tune')
+def tune_page():
+    return render_template('agents_tune.html')
+
+
 @agents_bp.route('/api/agents/state')
 def agents_state():
     return jsonify(runner.state())
@@ -114,3 +122,93 @@ def agents_reset():
         return jsonify({'error': 'Stop the agents before resetting'}), 409
     runner.pipeline.reset()
     return jsonify(runner.state())
+
+
+# agent backtest: settings, candle history and runs
+
+_history_lock = threading.Lock()
+_history_state = {'running': False, 'error': None, 'done': 0, 'total': 0, 'pair': None}
+MAX_POINTS = 600
+
+
+def _settings(config):
+    return {k: getattr(config, k) for k in TUNABLE}
+
+
+@agents_bp.route('/api/agents/settings')
+def agents_settings():
+    return jsonify({'live': _settings(runner.pipeline.config),
+                    'baseline': {**_settings(AgentConfig()), **BASELINE},
+                    'recommended': {**_settings(runner.pipeline.config), **RECOMMENDED}})
+
+
+@agents_bp.route('/api/agents/settings', methods=['POST'])
+def agents_apply_settings():
+    values = {k: v for k, v in (request.get_json(force=True) or {}).items() if k in TUNABLE}
+    try:
+        changed = runner.pipeline.apply_settings(values)
+    except (TypeError, ValueError) as e:
+        return jsonify({'error': f'Invalid setting: {e}'}), 400
+    return jsonify({'live': _settings(runner.pipeline.config), 'changed': changed})
+
+
+def _history_progress(done, total, pair):
+    _history_state.update(done=done, total=total, pair=pair)
+
+
+def _run_history(days):
+    try:
+        history.download(days, progress=_history_progress)
+        _history_state['error'] = None
+    except Exception as e:
+        _history_state['error'] = str(e)
+    finally:
+        _history_state['running'] = False
+
+
+@agents_bp.route('/api/agents/history')
+def agents_history():
+    return jsonify({'info': history.info(), **_history_state})
+
+
+@agents_bp.route('/api/agents/history', methods=['POST'])
+def agents_history_refresh():
+    """ Downloads 5 minute candles in the background. Takes a few minutes. """
+    days = min(max(int((request.get_json(silent=True) or {}).get('days', 30)), 3), 180)
+    with _history_lock:
+        if not _history_state['running']:
+            _history_state.update(running=True, error=None, done=0, total=0, pair=None)
+            threading.Thread(target=_run_history, args=(days,), daemon=True).start()
+    return jsonify({'running': True})
+
+
+def _downsample(points):
+    step = max(1, -(-len(points) // MAX_POINTS))
+    return points[::step] + ([points[-1]] if (len(points) - 1) % step else [])
+
+
+@agents_bp.route('/api/agents/simulate', methods=['POST'])
+def agents_simulate():
+    """ Runs the original rules and the given settings over the saved history. """
+    from agent_module.simulate import simulate
+    candles = history.load()
+    if not candles:
+        return jsonify({'error': 'Download candle history first'}), 400
+    body = request.get_json(force=True) or {}
+    settings = {k: v for k, v in (body.get('settings') or {}).items() if k in TUNABLE}
+    spread = float(body.get('spread', 0.001))
+
+    results = {}
+    for key, values in [('baseline', BASELINE), ('test', settings)]:
+        config = AgentConfig()
+        try:
+            config.update(values if key == 'test' else {**settings, **values})
+        except (TypeError, ValueError) as e:
+            return jsonify({'error': f'Invalid setting: {e}'}), 400
+        result = simulate(candles, config, spread=spread)
+        result['equity'] = _downsample(result['equity'])
+        result['trades'] = result['trades'][:100]
+        results[key] = result
+    first = min(df['time'].iloc[0] for df in candles.values())
+    last = max(df['time'].iloc[-1] for df in candles.values())
+    return jsonify({**results, 'pairs': len(candles), 'start': first.isoformat(), 'end': last.isoformat()})

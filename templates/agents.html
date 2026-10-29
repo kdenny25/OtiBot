@@ -4,6 +4,7 @@
 {% block page_sub %}Six agents scan Kraken USD pairs every minute and paper trade volume spikes.{% endblock %}
 {% block actions %}
 <span class="o-pill warn"><i class="bi bi-shield-check"></i> Paper mode</span>
+<a href="/agents/tune" class="btn btn-ghost"><i class="bi bi-sliders me-1"></i> Tune</a>
 <span class="o-pill" id="status"><span class="dot"></span>stopped</span>
 <button class="btn btn-accent" id="start"><i class="bi bi-play-fill me-1"></i> Start</button>
 <button class="btn btn-ghost d-none" id="stop"><i class="bi bi-pause-fill me-1"></i> Stop</button>
@@ -233,7 +234,9 @@ function renderCalls(s) {
 }
 
 function renderTables(s) {
-    $('open-count').textContent = `${s.positions.length} of ${s.config.max_open_positions}`;
+    const waiting = (s.orders || []).length;
+    $('open-count').textContent = `${s.positions.length} of ${s.config.max_open_positions}` +
+        (waiting ? ` · ${waiting} limit buy${waiting > 1 ? 's' : ''} waiting` : '');
     O.setHTML($('positions'), s.positions.length ? s.positions.map(p => {
         const pnl = p.units * p.last - p.cost - p.fees;
         return `<tr><td class="fw-semibold">${O.esc(p.symbol)}</td><td class="text-end">${O.price(p.entry_price)}</td>
