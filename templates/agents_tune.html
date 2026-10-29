@@ -45,15 +45,25 @@
                 <input class="form-check-input" type="checkbox" name="confirm_spike" id="confirm_spike">
                 <label class="form-check-label small" for="confirm_spike">Wait for the next candle to hold the spike</label>
             </div>
-            <div class="form-check form-switch mt-2">
-                <input class="form-check-input" type="checkbox" name="market_filter" id="market_filter">
-                <label class="form-check-label small" for="market_filter">No new buys while BTC is below today's open</label>
-            </div>
             <div class="row g-2 mt-1">
                 <div class="col-6"><label class="form-label">Skip if up over %</label>
                     <input class="form-control" type="number" name="max_entry_move" data-pct min="0" step="0.5" title="0 turns it off"></div>
                 <div class="col-6"><label class="form-label">Min spike ×</label>
                     <input class="form-control" type="number" name="min_spike" min="1" step="0.5"></div>
+                <div class="col-12"><label class="form-label">Candle size</label>
+                    <select class="form-select" name="candle_interval">
+                        <option value="5">5 minutes</option><option value="15">15 minutes</option><option value="60">1 hour</option>
+                    </select></div>
+            </div>
+
+            <div class="o-section">Falling markets</div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="short_spikes" id="short_spikes">
+                <label class="form-check-label small" for="short_spikes">Short red volume spikes <span class="muted">· paper only</span></label>
+            </div>
+            <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" name="market_filter" id="market_filter">
+                <label class="form-check-label small" for="market_filter">Follow BTC: buy only while it's up today, short only while it's down</label>
             </div>
 
             <div class="o-section">Exits</div>
@@ -148,22 +158,40 @@
                     <button class="btn btn-accent" id="apply"><i class="bi bi-check2-circle me-1"></i> Use for live agents</button>
                 </div>
             </div>
+            <div class="o-card mb-3">
+                <div class="o-card-head flex-wrap">
+                    <h2 class="o-card-title">What each setting does</h2>
+                    <span class="small muted">each row reruns your settings with just that one change</span>
+                </div>
+                <div id="impact-wait" class="small text-2 py-2"><span class="spinner-border spinner-border-sm text-warning me-2"></span>Testing each setting on its own…</div>
+                <div class="o-scroll">
+                    <table class="o-table">
+                        <thead><tr><th>Setting</th><th>Now</th><th class="text-end">Return if switched</th>
+                            <th class="text-end">Change</th><th>Biggest change in why trades closed</th></tr></thead>
+                        <tbody id="impact"></tbody>
+                    </table>
+                </div>
+                <div class="small muted mt-2">Change is what switching that one setting does to your return: green means switching helps. Settings work together, so the changes don't add up exactly.</div>
+            </div>
             <div class="row g-3">
-                <div class="col-xl-5">
+                <div class="col-12">
                     <div class="o-card h-100">
-                        <div class="o-card-head"><h2 class="o-card-title">Why trades closed</h2><span class="small muted">your settings</span></div>
-                        <table class="o-table">
-                            <thead><tr><th>Exit</th><th class="text-end">Trades</th><th class="text-end">P&amp;L</th></tr></thead>
-                            <tbody id="exits"></tbody>
-                        </table>
+                        <div class="o-card-head"><h2 class="o-card-title">Why trades closed</h2><span class="small muted" id="sides"></span></div>
+                        <div class="o-scroll">
+                            <table class="o-table">
+                                <thead><tr><th>Exit</th><th class="text-end">Yours</th><th class="text-end">P&amp;L</th>
+                                    <th class="text-end">Original</th><th class="text-end">P&amp;L</th></tr></thead>
+                                <tbody id="exits"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-                <div class="col-xl-7">
+                <div class="col-12">
                     <div class="o-card h-100">
                         <div class="o-card-head"><h2 class="o-card-title">Trades</h2><span class="small muted" id="trade-count"></span></div>
                         <div class="o-scroll" style="max-height: 360px">
                             <table class="o-table">
-                                <thead><tr><th>Pair</th><th>Entry</th><th>Exit</th><th>Why</th><th class="text-end">P&amp;L</th></tr></thead>
+                                <thead><tr><th>Pair</th><th>Side</th><th>Entry</th><th>Exit</th><th>Why</th><th class="text-end">P&amp;L</th></tr></thead>
                                 <tbody id="trades"></tbody>
                             </table>
                         </div>
@@ -187,7 +215,9 @@ const HELP = {
     limit_orders: 'Buys with a limit order at the current bid instead of paying the ask. Kraken charges 0.25% instead of 0.40% and there is no slippage. The catch: if the price keeps rising, the order never fills and is cancelled after 5 minutes. Take profit also waits as a limit order. Stop losses still sell at market, so they always get out.',
     trail_covers_costs: 'The trailing stop normally turns on as soon as a trade is up by "Trail after up". With this on, it waits until the stop would sell above the entry price plus fees, so a trailing stop exit is never a loss.',
     confirm_spike: 'Instead of buying as soon as a spike candle closes, waits for the next 5-minute candle and only buys if it held at least half of the spike\'s gain. Filters out spikes that reverse right away, for a slightly later entry.',
-    market_filter: 'Skips new buys while BTC trades below its price at midnight UTC. Most coins fall with BTC, so this avoids buying into a falling market. Open trades are still managed as normal.',
+    market_filter: 'Most coins move with BTC. With this on, the agents only buy while BTC is above its price at midnight UTC, and only short while it is below. Open trades are still managed as normal.',
+    short_spikes: 'A short sells first and buys back later, so it makes money when the price falls. With this on, a volume spike on a red candle becomes a short instead of being skipped, using the same exits mirrored. Shorts pay Kraken\'s margin fee: 0.02% to open and every 4 hours. Paper only: live shorting needs margin trading on your Kraken account.',
+    candle_interval: 'How long each candle the agents read covers. Fees are the same on every trade, so bigger candles mean bigger moves per trade and fees eat less of each one, but fewer trades. The volume baseline is always the 24 candles before (2 hours on 5 minutes, a day on 1 hour). Take profit and stop loss usually need to be wider on bigger candles.',
     max_entry_move: 'Skips a spike if that one candle already rose more than this. Big jumps often pull back, so buying right after one usually means buying the top. 0 turns this off.',
     min_spike: 'How unusual volume must be to count as a spike: the candle\'s volume divided by the median of the 24 candles before it (2 hours). 3 means three times normal. Higher means fewer, stronger signals.',
     take_profit: 'Sells once a trade is up this much from its entry price, before fees.',
@@ -227,7 +257,7 @@ function fill(values) {
         const el = form.elements[k];
         if (!el) continue;
         if (el.type === 'checkbox') el.checked = !!v;
-        else el.value = el.hasAttribute('data-pct') ? +(v * 100).toFixed(3) : v;
+        else el.value = el.hasAttribute('data-pct') ? +(v * 100).toFixed(3) : String(v);
     }
 }
 
@@ -275,6 +305,62 @@ function row(label, r) {
         <td class="text-end">${O.money(s.fees)}</td><td class="text-end">${O.pct(s.max_drawdown)}</td></tr>`;
 }
 
+const byReason = list => Object.fromEntries((list || []).map(e => [e.reason, e]));
+const LABELS = {limit_orders: 'Limit orders', trail_covers_costs: 'Trailing stop after fees',
+    confirm_spike: 'Wait for the spike to hold', market_filter: 'Follow BTC', max_entry_move: 'Skip spikes already up',
+    stale_minutes: 'Close flat trades', short_spikes: 'Short red spikes', candle_interval: 'Candle size'};
+const sizeName = m => m >= 60 ? `${m / 60} hour` : `${m} min`;
+let lastSettings = null;
+
+function exitChange(after, before) {
+    // the reasons whose P&L moves most when switching from before to after
+    const a = after.exits, b = before.exits;
+    const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].map(k => {
+        const x = a[k] || {count: 0, pnl: 0}, y = b[k] || {count: 0, pnl: 0};
+        return {k, count: x.count - y.count, pnl: x.pnl - y.pnl};
+    }).filter(d => d.count || Math.abs(d.pnl) >= 0.5).sort((p, q) => Math.abs(q.pnl) - Math.abs(p.pnl)).slice(0, 2);
+    return keys.map(d => `${O.esc(d.k)} <span class="muted">${d.count > 0 ? '+' : ''}${d.count} trades,</span> <span class="${O.cls(d.pnl)}">${O.signed(d.pnl)}</span>`).join('<br>') || '<span class="muted">no change</span>';
+}
+
+function renderImpact(data) {
+    $('impact-wait').classList.add('d-none');
+    const cur = data.current;
+    $('impact').innerHTML = data.rows.map(row => {
+        const other = row.other;
+        const size = row.setting === 'candle_interval';
+        const change = other.return - cur.return;
+        const now = size ? sizeName(lastSettings.candle_interval) : row.on ? '<span class="pos fw-semibold">on</span>' : '<span class="muted">off</span>';
+        const name = size ? `Candle size ${sizeName(row.value)}` : LABELS[row.setting];
+        const action = size ? `Use ${sizeName(row.value)}` : row.on ? 'Turn off' : 'Turn on';
+        return `<tr><td><div class="fw-semibold text-nowrap">${name}</div>
+            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" data-try="${row.setting}" data-value="${size ? row.value : ''}">${action} <i class="bi bi-arrow-right"></i></button></td>
+            <td>${now}</td>
+            <td class="text-end ${O.cls(other.return)}">${O.signedPct(other.return)}</td>
+            <td class="text-end fw-semibold ${O.cls(change)}">${O.signedPct(change)}</td>
+            <td class="small">${exitChange(other, cur)}</td></tr>`;
+    }).join('');
+}
+
+async function loadImpact(settings, spread) {
+    $('impact').innerHTML = '';
+    $('impact-wait').classList.remove('d-none');
+    try {
+        renderImpact(await O.postJSON('/api/agents/impact', {settings, spread}));
+    } catch (err) {
+        $('impact-wait').textContent = `Couldn't test each setting: ${err.message}`;
+    }
+}
+
+$('impact').addEventListener('click', e => {
+    const b = e.target.closest('[data-try]');
+    if (!b) return;
+    const key = b.dataset.try, el = form.elements[key];
+    if (key === 'candle_interval') el.value = b.dataset.value;
+    else if (el.type === 'checkbox') el.checked = !el.checked;
+    else el.value = Number(el.value) ? 0 : (key === 'max_entry_move' ? 3 : 90);
+    form.requestSubmit();
+});
+
 function render(r) {
     $('empty').classList.add('d-none');
     $('results').classList.remove('d-none');
@@ -284,13 +370,19 @@ function render(r) {
         {name: 'Your settings', color: 'var(--o-accent)', points: r.test.equity},
         {name: 'Original rules', color: 'var(--o-series-2)', points: r.baseline.equity, dashed: true},
     ], {height: 280, format: v => O.money(v, 0)});
-    $('exits').innerHTML = r.test.exits.length ? r.test.exits.sort((a, b) => b.count - a.count).map(e => `<tr>
-        <td>${O.esc(e.reason)}</td><td class="text-end">${e.count}</td>
-        <td class="text-end fw-semibold ${O.cls(e.pnl)}">${O.signed(e.pnl)}</td></tr>`).join('')
-        : '<tr><td colspan="3" class="o-empty">No trades</td></tr>';
+    const mine = byReason(r.test.exits), orig = byReason(r.baseline.exits);
+    const reasons = [...new Set([...Object.keys(mine), ...Object.keys(orig)])]
+        .sort((a, b) => ((mine[b] || {}).count || 0) - ((mine[a] || {}).count || 0));
+    const cell = e => e ? `<td class="text-end">${e.count}</td><td class="text-end fw-semibold ${O.cls(e.pnl)}">${O.signed(e.pnl)}</td>`
+                        : '<td class="text-end muted">0</td><td class="text-end muted">–</td>';
+    $('exits').innerHTML = reasons.length ? reasons.map(k => `<tr><td>${O.esc(k)}</td>${cell(mine[k])}${cell(orig[k])}</tr>`).join('')
+        : '<tr><td colspan="5" class="o-empty">No trades</td></tr>';
+    const sides = r.test.stats.sides || {};
+    $('sides').textContent = Object.entries(sides).map(([k, v]) => `${k}s ${v.trades} · ${O.signed(v.pnl)}`).join('  |  ');
     $('trade-count').textContent = r.test.stats.trades > r.test.trades.length ? `latest ${r.test.trades.length} of ${r.test.stats.trades}` : '';
     $('trades').innerHTML = r.test.trades.map(t => `<tr>
-        <td class="fw-semibold">${O.esc(t.symbol)}</td><td class="text-2">${O.date(t.entry_time)}</td>
+        <td class="fw-semibold">${O.esc(t.symbol)}</td><td><span class="tag ${t.side === 'short' ? 'tag-SKIP' : 'tag-PASS'}">${O.esc(t.side || 'long').toUpperCase()}</span></td>
+        <td class="text-2">${O.date(t.entry_time)}</td>
         <td class="text-2">${O.date(t.exit_time)}</td><td>${O.esc(t.reason)}</td>
         <td class="text-end fw-semibold ${O.cls(t.pnl)}">${O.signed(t.pnl)}</td></tr>`).join('');
 }
@@ -300,8 +392,12 @@ form.addEventListener('submit', async e => {
     $('error').classList.add('d-none');
     $('results').classList.add('o-dim');
     try {
-        await O.withSpinner($('run'), async () =>
-            render(await O.postJSON('/api/agents/simulate', {settings: read(), spread: Number(form.spread.value) / 100})));
+        const settings = read(), spread = Number(form.spread.value) / 100;
+        await O.withSpinner($('run'), async () => {
+            render(await O.postJSON('/api/agents/simulate', {settings, spread}));
+            lastSettings = settings;
+        });
+        loadImpact(settings, spread);
     } catch (err) {
         $('error').textContent = err.message;
         $('error').classList.remove('d-none');

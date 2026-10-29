@@ -7,8 +7,8 @@ from flask_socketio import SocketIO
 from agent_module import AgentConfig, Pipeline
 from agent_module import history
 from agent_module.config import BASELINE, RECOMMENDED
-from agent_module.rules import FADED, LATE, PASS, RED, exit_reason, spike_signals
-from agent_module.simulate import simulate
+from agent_module.rules import FADED, LATE, PASS, RED, SHORT, exit_reason, spike_signals
+from agent_module.simulate import resample, simulate
 from agent_module.store import Store
 from tests.test_agents import FakeMarket, make_candles
 
@@ -271,3 +271,149 @@ def test_tune_routes(monkeypatch):
     r = client.post('/api/agents/simulate', json={'settings': {'limit_orders': False}}).get_json()
     assert r['test']['stats']['trades'] == 1 and r['baseline']['stats']['trades'] == 1
     assert r['pairs'] == 1 and len(r['test']['equity']) <= 601
+
+
+# shorts and candle size
+
+def test_red_spike_becomes_a_short():
+    assert last_signal(QUIET + [(100, 99, 80)], short_spikes=True) == SHORT
+    assert last_signal(QUIET + [(100, 95, 80)], short_spikes=True, max_entry_move=0.03) == LATE
+    held = QUIET + [(100, 98, 80), (98, 97.8, 30)]
+    assert last_signal(held, short_spikes=True, confirm_spike=True) == SHORT
+    bounced = QUIET + [(100, 98, 80), (98, 99.5, 30)]
+    assert last_signal(bounced, short_spikes=True, confirm_spike=True) == FADED
+
+
+def test_short_exits_are_mirrored():
+    pos = {'entry_price': 100.0, 'entry_ts': 0, 'peak': 100.0, 'side': -1, 'fee_rate': 0.004}
+    config = AgentConfig()
+    assert exit_reason(pos, 102.0, 60, config) == 'stop loss'
+    assert exit_reason(pos, 96.0, 60, config) == 'take profit'
+    assert exit_reason(pos, 99.0, 60, config) is None
+    pos['peak'] = 98.0
+    assert exit_reason(pos, 99.5, 60, config) == 'trailing stop'
+    assert exit_reason(pos, 99.5, 60, AgentConfig(trail_covers_costs=True)) is None
+
+
+class RedMarket(FakeMarket):
+    def candles(self, pair, interval):
+        volumes = [10.0] * 30
+        if pair in self.spiking:
+            volumes[-1] = 80.0
+            return make_candles(volumes, last_open=101.0, last_close=100.0)
+        return make_candles(volumes)
+
+
+def test_pipeline_shorts_red_spike_and_profits_when_price_falls():
+    market = RedMarket()
+    market.spiking = {'XETHZUSD'}
+    p = Pipeline(market, Store(':memory:'), AgentConfig(start_balance=1000, short_spikes=True))
+    p.run_cycle(now_ts=1)
+    pos = p.broker.positions['XETHZUSD']
+    assert pos['side'] == -1 and pos['entry_price'] < 100.0
+    assert p.broker.equity(market.tickers(['XETHZUSD'])) < 1000
+    market.spiking = set()
+    market.prices['XETHZUSD'] = 95.0
+    p.run_cycle(now_ts=1 + 5 * 3600)
+    trade = p.store.trades()[0]
+    assert trade['reason'] == 'take profit' and trade['symbol'] == 'ETH/USD short'
+    # gain on the fall, less two taker fees and margin fees for opening and one 4 hour rollover
+    gain = pos['units'] * (pos['entry_price'] - trade['exit_price'])
+    exit_fee = pos['units'] * trade['exit_price'] * 0.004
+    assert trade['pnl'] == pytest.approx(gain - pos['fees'] - exit_fee - 100 * 0.0002 * 2)
+    assert p.broker.cash == pytest.approx(1000 + trade['pnl'])
+
+
+def test_shorts_off_skip_red_spikes():
+    market = RedMarket()
+    market.spiking = {'XETHZUSD'}
+    p = Pipeline(market, Store(':memory:'), AgentConfig())
+    p.run_cycle()
+    assert p.broker.positions == {}
+
+
+def test_follow_btc_only_shorts_while_btc_is_down():
+    market = RedMarket()
+    market.pairs['XXBTZUSD'] = 'XBT/USD'
+    market.prices['XXBTZUSD'] = 60000.0
+    market.volume['XXBTZUSD'] = 1e9
+    base = market.tickers
+    market.tickers = lambda pairs: {p: {**t, 'open': 61000.0 if p == 'XXBTZUSD' else None}
+                                    for p, t in base(pairs).items()}
+    market.spiking = {'XETHZUSD'}
+    config = AgentConfig(short_spikes=True, market_filter=True)
+    p = Pipeline(market, Store(':memory:'), config)
+    p.run_cycle()
+    assert p.broker.positions['XETHZUSD']['side'] == -1
+    assert any('shorts only' in e['detail'] for e in p.store.recent_events(50, agent='RISK CHECK'))
+
+    market.prices['XXBTZUSD'] = 62000.0
+    p2 = Pipeline(market, Store(':memory:'), AgentConfig(short_spikes=True, market_filter=True))
+    p2.run_cycle()
+    assert p2.broker.positions == {}
+
+
+def test_limit_short_waits_at_the_ask():
+    market = RedMarket()
+    market.spiking = {'XETHZUSD'}
+    p = Pipeline(market, Store(':memory:'), AgentConfig(short_spikes=True, limit_orders=True))
+    p.run_cycle(now_ts=1)
+    order = p.broker.orders['XETHZUSD']
+    assert order['side'] == -1 and order['price'] == pytest.approx(100 * 1.0005)
+    market.spiking = set()
+    market.prices['XETHZUSD'] = 101.0
+    p.run_cycle(now_ts=60)
+    pos = p.broker.positions['XETHZUSD']
+    assert pos['side'] == -1 and pos['entry_price'] == order['price'] and pos['fee_rate'] == 0.0025
+
+
+def test_simulate_shorts_a_falling_market():
+    pair = trend(80, step=-0.004, spike_at={30}, jump=-0.01)
+    off = simulate({'ETH/USD': pair}, AgentConfig(min_quote_volume=0))
+    assert off['stats']['trades'] == 0
+    on = simulate({'ETH/USD': pair}, AgentConfig(min_quote_volume=0, short_spikes=True))
+    trade = on['trades'][-1]
+    assert trade['side'] == 'short' and trade['reason'] == 'take profit' and trade['pnl'] > 0
+    assert on['stats']['sides'] == {'short': {'trades': 1, 'pnl': trade['pnl']}}
+
+
+def test_simulate_short_stop_loss():
+    pair = trend(80, step=0.004, spike_at={30}, jump=-0.01)
+    result = simulate({'ETH/USD': pair}, AgentConfig(min_quote_volume=0, short_spikes=True))
+    assert result['trades'][-1]['reason'] == 'stop loss' and result['trades'][-1]['pnl'] < 0
+
+
+def test_resample_joins_candles():
+    pair = trend(12, step=0.01)
+    big = resample(pair, 15)
+    assert len(big) == 4
+    first = big.iloc[0]
+    assert first['open'] == pair['open'].iloc[0] and first['close'] == pair['close'].iloc[2]
+    assert first['high'] == pair['high'].iloc[:3].max() and first['volume'] == pair['volume'].iloc[:3].sum()
+    assert len(resample(big, 15)) == 4
+
+
+def test_simulate_on_bigger_candles():
+    pair = trend(240, step=0.001)
+    pair.loc[120:122, 'volume'] = 300.0
+    result = simulate({'ETH/USD': pair}, AgentConfig(min_quote_volume=0, candle_interval=15))
+    assert len(result['equity']) == 80
+
+
+def test_impact_route(monkeypatch):
+    from agent_module.routes import init_agents
+    pipeline = Pipeline(FakeMarket(), Store(':memory:'), AgentConfig())
+    app = Flask(__name__, template_folder='../templates')
+    init_agents(app, SocketIO(app), pipeline_factory=lambda: pipeline)
+    client = app.test_client()
+    pair = trend(80, step=0.004, spike_at={30})
+    pair['volume'] *= 1e5
+    monkeypatch.setattr(history, 'load', lambda: {'ETH/USD': pair})
+    r = client.post('/api/agents/impact', json={'settings': {'limit_orders': True}}).get_json()
+    rows = {(row['setting'], row.get('value')): row for row in r['rows']}
+    assert rows[('limit_orders', None)]['on'] is True
+    assert rows[('short_spikes', None)]['on'] is False
+    assert {(k, v) for k, v in rows if k == 'candle_interval'} == {('candle_interval', 15), ('candle_interval', 60)}
+    assert 'exits' in r['current'] and 'return' in rows[('market_filter', None)]['other']
+    bad = client.post('/api/agents/impact', json={'settings': {'candle_interval': 7}})
+    assert bad.status_code == 400

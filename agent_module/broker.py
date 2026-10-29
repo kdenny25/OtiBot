@@ -1,7 +1,12 @@
-# Paper broker. Market orders fill buys at the ask and sells at the bid, plus
-# slippage and the taker fee, so results include the cost of crossing the
-# spread. Limit orders fill at their own price with the maker fee, and only
-# once the market trades down to them.
+# Paper broker. Market orders cross the spread: a long buys at the ask and
+# sells at the bid, a short sells at the bid and buys back at the ask, plus
+# slippage and the taker fee. Limit orders fill at their own price with the
+# maker fee, and only once the market trades through them.
+#
+# A short sets aside its value as collateral, like a long's cost, and pays
+# Kraken's margin fee to open and every 4 hours it stays open.
+from agent_module.rules import margin_cost
+
 
 class PaperBroker:
     def __init__(self, config, store):
@@ -9,30 +14,46 @@ class PaperBroker:
         self.store = store
         self.cash = store.get('cash', config.start_balance)
         self.positions = store.positions()
-        # limit buys waiting to fill, pair -> order
+        # limit orders waiting to fill, pair -> order
         self.orders = store.get('orders', {})
+
+    @staticmethod
+    def close_price(pos, ticker):
+        """ What closing trades at: the bid for a long, the ask for a short. """
+        return ticker['bid'] if pos.get('side', 1) == 1 else ticker['ask']
+
+    @staticmethod
+    def value(pos, price):
+        """ What a position is worth at price, before fees to close. """
+        if pos.get('side', 1) == 1:
+            return pos['units'] * price
+        return pos['cost'] + pos['units'] * (pos['entry_price'] - price)
 
     def equity(self, tickers=None):
         value = self.cash
         for pair, pos in self.positions.items():
-            price = tickers[pair]['bid'] if tickers and pair in tickers else pos['last']
-            value += pos['units'] * price
+            price = self.close_price(pos, tickers[pair]) if tickers and pair in tickers else pos['last']
+            value += self.value(pos, price)
         return value
 
     def free_cash(self):
-        """ Cash not set aside for limit buys that haven't filled yet. """
+        """ Cash not set aside for limit orders that haven't filled yet. """
         return self.cash - sum(o['value'] * (1 + self.config.maker_fee) for o in self.orders.values())
 
-    def buy(self, now, now_ts, pair, symbol, ticker, value, limit=None):
-        """ Market buy, or with limit the fill of a limit buy at that price. """
+    def open(self, now, now_ts, pair, symbol, ticker, value, side=1, limit=None):
+        """ Market order, or with limit the fill of a limit order at that price. """
         c = self.config
         mid = (ticker['bid'] + ticker['ask']) / 2
-        if limit is None:
+        if limit is not None:
+            fill, fee_rate = limit, c.maker_fee
+        elif side == 1:
             fill, fee_rate = ticker['ask'] * (1 + c.slippage), c.taker_fee
         else:
-            fill, fee_rate = limit, c.maker_fee
+            fill, fee_rate = ticker['bid'] * (1 - c.slippage), c.taker_fee
         fee = value * fee_rate
+        start = self.close_price({'side': side}, ticker)
         pos = {'symbol': symbol,
+               'side': side,
                'entry_time': now,
                'entry_ts': now_ts,
                'entry_price': fill,
@@ -40,17 +61,21 @@ class PaperBroker:
                'cost': value,
                'fees': fee,
                'fee_rate': fee_rate,
-               'entry_slip': fill / mid - 1,
-               'peak': ticker['bid'],
-               'last': ticker['bid']}
+               'entry_slip': side * (fill / mid - 1),
+               'peak': start,
+               'last': start}
         self.cash -= value + fee
         self.positions[pair] = pos
         self.store.save_position(pair, pos)
         self.store.set('cash', self.cash)
         return pos
 
-    def place_limit_buy(self, now, now_ts, pair, symbol, price, value):
-        self.orders[pair] = {'symbol': symbol, 'time': now, 'ts': now_ts, 'price': price, 'value': value}
+    def buy(self, now, now_ts, pair, symbol, ticker, value, limit=None):
+        return self.open(now, now_ts, pair, symbol, ticker, value, 1, limit)
+
+    def place_limit(self, now, now_ts, pair, symbol, price, value, side=1):
+        self.orders[pair] = {'symbol': symbol, 'side': side, 'time': now, 'ts': now_ts,
+                             'price': price, 'value': value}
         self.store.set('orders', self.orders)
         return self.orders[pair]
 
@@ -61,7 +86,7 @@ class PaperBroker:
 
     def check_orders(self, now, now_ts, tickers):
         """
-        Fills limit buys the market traded down to and cancels the ones
+        Fills limit orders the market traded through and cancels the ones
         that waited too long.
 
         :return:
@@ -69,41 +94,47 @@ class PaperBroker:
         """
         filled, cancelled = [], []
         for pair, order in list(self.orders.items()):
-            ticker = tickers.get(pair)
-            if ticker and (ticker['ask'] <= order['price'] or ticker['last'] < order['price']):
+            ticker, price, side = tickers.get(pair), order['price'], order.get('side', 1)
+            hit = ticker and ((ticker['ask'] <= price or ticker['last'] < price) if side == 1
+                              else (ticker['bid'] >= price or ticker['last'] > price))
+            if hit:
                 self.cancel(pair)
-                filled.append((pair, self.buy(now, now_ts, pair, order['symbol'], ticker,
-                                              order['value'], limit=order['price'])))
+                filled.append((pair, self.open(now, now_ts, pair, order['symbol'], ticker,
+                                               order['value'], side, limit=price)))
             elif now_ts - order['ts'] >= self.config.limit_wait_minutes * 60:
                 cancelled.append((pair, self.cancel(pair)))
         return filled, cancelled
 
-    def mark(self, pair, bid):
+    def mark(self, pair, ticker):
         pos = self.positions[pair]
-        pos['last'] = bid
-        pos['peak'] = max(pos['peak'], bid)
+        price = self.close_price(pos, ticker)
+        pos['last'] = price
+        pos['peak'] = max(pos['peak'], price) if pos.get('side', 1) == 1 else min(pos['peak'], price)
         self.store.save_position(pair, pos)
 
-    def sell(self, now, pair, ticker, reason, limit=None):
-        """ Market sell, or with limit the fill of a resting limit sell at that price. """
+    def close(self, now, now_ts, pair, ticker, reason, limit=None):
+        """ Market order, or with limit the fill of a resting limit order at that price. """
         c = self.config
         pos = self.positions.pop(pair)
+        side = pos.get('side', 1)
         mid = (ticker['bid'] + ticker['ask']) / 2
-        if limit is None:
-            fill, fee_rate = ticker['bid'] * (1 - c.slippage), c.taker_fee
-        else:
+        if limit is not None:
             fill, fee_rate = limit, c.maker_fee
-        proceeds = pos['units'] * fill
-        fee = proceeds * fee_rate
+        else:
+            fill, fee_rate = self.close_price(pos, ticker) * (1 - side * c.slippage), c.taker_fee
+        proceeds = self.value(pos, fill)
+        fee = pos['units'] * fill * fee_rate
+        if side == -1:
+            fee += margin_cost(c, pos['cost'], now_ts - pos['entry_ts'])
         self.cash += proceeds - fee
-        trade = {'symbol': pos['symbol'],
+        trade = {'symbol': pos['symbol'] + (' short' if side == -1 else ''),
                  'entry_time': pos['entry_time'],
                  'exit_time': now,
                  'entry_price': pos['entry_price'],
                  'exit_price': fill,
                  'units': pos['units'],
                  'fees': pos['fees'] + fee,
-                 'slippage': pos['entry_slip'] + (1 - fill / mid),
+                 'slippage': pos['entry_slip'] + side * (1 - fill / mid),
                  'pnl': proceeds - fee - pos['cost'] - pos['fees'],
                  'reason': reason}
         self.store.add_trade(trade)

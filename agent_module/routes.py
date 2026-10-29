@@ -6,7 +6,7 @@ import time
 from flask import Blueprint, jsonify, render_template, request
 
 from agent_module import history
-from agent_module.config import AgentConfig, BASELINE, RECOMMENDED, TUNABLE
+from agent_module.config import AgentConfig, BASELINE, CANDLE_SIZES, IMPACT, RECOMMENDED, TUNABLE
 
 agents_bp = Blueprint('agents', __name__)
 
@@ -187,28 +187,77 @@ def _downsample(points):
     return points[::step] + ([points[-1]] if (len(points) - 1) % step else [])
 
 
+def _config(values):
+    config = AgentConfig()
+    config.update(values)
+    if config.candle_interval not in CANDLE_SIZES:
+        raise ValueError(f'candle size must be one of {CANDLE_SIZES} minutes')
+    return config
+
+
+def _sim_request():
+    """ :return: (candles, settings, spread) from the request, or raises ValueError """
+    candles = history.load()
+    if not candles:
+        raise ValueError('Download candle history first')
+    body = request.get_json(force=True) or {}
+    settings = {k: v for k, v in (body.get('settings') or {}).items() if k in TUNABLE}
+    try:
+        _config(settings)
+    except (TypeError, ValueError) as e:
+        raise ValueError(f'Invalid setting: {e}')
+    return candles, settings, float(body.get('spread', 0.001))
+
+
 @agents_bp.route('/api/agents/simulate', methods=['POST'])
 def agents_simulate():
     """ Runs the original rules and the given settings over the saved history. """
     from agent_module.simulate import simulate
-    candles = history.load()
-    if not candles:
-        return jsonify({'error': 'Download candle history first'}), 400
-    body = request.get_json(force=True) or {}
-    settings = {k: v for k, v in (body.get('settings') or {}).items() if k in TUNABLE}
-    spread = float(body.get('spread', 0.001))
+    try:
+        candles, settings, spread = _sim_request()
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
     results = {}
-    for key, values in [('baseline', BASELINE), ('test', settings)]:
-        config = AgentConfig()
-        try:
-            config.update(values if key == 'test' else {**settings, **values})
-        except (TypeError, ValueError) as e:
-            return jsonify({'error': f'Invalid setting: {e}'}), 400
-        result = simulate(candles, config, spread=spread)
+    for key, values in [('baseline', {**settings, **BASELINE}), ('test', settings)]:
+        result = simulate(candles, _config(values), spread=spread)
         result['equity'] = _downsample(result['equity'])
         result['trades'] = result['trades'][:100]
         results[key] = result
     first = min(df['time'].iloc[0] for df in candles.values())
     last = max(df['time'].iloc[-1] for df in candles.values())
     return jsonify({**results, 'pairs': len(candles), 'start': first.isoformat(), 'end': last.isoformat()})
+
+
+@agents_bp.route('/api/agents/impact', methods=['POST'])
+def agents_impact():
+    """
+    Reruns the given settings with one change at a time: each rule switched
+    the other way, and each other candle size. Shows what every rule adds
+    and how it moves the reasons trades closed.
+    """
+    from agent_module.simulate import simulate
+    try:
+        candles, settings, spread = _sim_request()
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    def summary(result):
+        return {'return': result['stats']['total_return'], 'trades': result['stats']['trades'],
+                'win_rate': result['stats']['win_rate'], 'fees': result['stats']['fees'],
+                'exits': {e['reason']: {'count': e['count'], 'pnl': e['pnl']} for e in result['exits']}}
+
+    test = _config(settings)
+    current = summary(simulate(candles, test, spread=spread))
+    rows = []
+    for key, on_value in IMPACT.items():
+        on = bool(getattr(test, key))
+        other = BASELINE[key] if on else on_value
+        rows.append({'setting': key, 'on': on,
+                     'other': summary(simulate(candles, _config({**settings, key: other}), spread=spread))})
+    for size in CANDLE_SIZES:
+        if size != test.candle_interval:
+            rows.append({'setting': 'candle_interval', 'value': size, 'on': False,
+                         'other': summary(simulate(candles, _config({**settings, 'candle_interval': size}),
+                                                   spread=spread))})
+    return jsonify({'current': current, 'rows': rows})
