@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OtiBot">
+  <title>OtiBot</title>
+  <rect width="64" height="64" rx="15" fill="#f5a524"/>
+  <circle cx="30" cy="34" r="18" fill="none" stroke="#1a1203" stroke-width="7.5"/>
+  <!-- trend line breaking out of the O; the amber halo cuts it clear of the ring -->
+  <polyline points="15,42 25,32 32,38 49,21" fill="none" stroke="#f5a524" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="15,42 25,32 32,38 46,24" fill="none" stroke="#1a1203" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M39 19.5H51.5V32Z" fill="#1a1203" stroke="#1a1203" stroke-width="2" stroke-linejoin="round"/>
+</svg>

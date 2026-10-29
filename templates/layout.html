@@ -13,6 +13,10 @@
             document.documentElement.setAttribute('data-bs-theme', theme);
         })();
     </script>
+    <link rel="icon" href="{{ url_for('static', filename='img/otibot-logo.svg') }}" type="image/svg+xml">
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon-32.png') }}" type="image/png" sizes="32x32">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
+    <meta name="theme-color" content="#0b0e14">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -32,7 +36,7 @@
 ] %}
 {% macro sidebar() %}
 <aside class="o-sidebar">
-    <a class="o-brand" href="/"><span class="o-logo">O</span><span class="o-brand-name">OtiBot</span></a>
+    <a class="o-brand" href="/"><img class="o-logo-img" src="{{ url_for('static', filename='img/otibot-logo.svg') }}" alt="" width="32" height="32"><span class="o-brand-name">OtiBot</span></a>
     <nav class="o-nav">
         <div class="o-nav-label">Workspace</div>
         {% for endpoint, href, icon, label in nav %}
@@ -52,7 +56,7 @@
     {{ sidebar() }}
     <div class="o-main">
         <header class="o-topbar">
-            <a class="o-brand p-0" href="/"><span class="o-logo">O</span><span class="o-brand-name">OtiBot</span></a>
+            <a class="o-brand p-0" href="/"><img class="o-logo-img" src="{{ url_for('static', filename='img/otibot-logo.svg') }}" alt="" width="32" height="32"><span class="o-brand-name">OtiBot</span></a>
             <button class="btn btn-ghost btn-icon" data-bs-toggle="offcanvas" data-bs-target="#mobile-nav" aria-label="Open menu">
                 <i class="bi bi-list fs-5"></i>
             </button>

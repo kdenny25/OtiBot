@@ -54,6 +54,12 @@ def index():
     return render_template('home.html')
 
 
+@app.route('/favicon.ico')
+def favicon():
+    # browsers ask for /favicon.ico directly, before reading the page's <link> tags
+    return app.send_static_file('img/favicon.ico')
+
+
 @app.route('/healthz')
 def healthz():
     return jsonify({'ok': True})
