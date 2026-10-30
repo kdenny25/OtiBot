@@ -5,7 +5,7 @@ import time as _time
 
 import numpy as np
 
-from agent_module.rules import PASS, describe, exit_reason, spike_signals
+from agent_module.rules import SIDES, describe, exit_reason, spike_signals
 
 
 class ScanAgent:
@@ -62,7 +62,8 @@ def volume_spike(candles, lookback):
 class VolumeAgent:
     """
     Passes pairs whose last candle traded far above normal and closed green,
-    and with the stricter settings on, hadn't already run up and held its gain.
+    or red with shorting on, and with the stricter settings on, hadn't
+    already run and held its move.
     """
     name = 'VOLUME'
 
@@ -72,6 +73,10 @@ class VolumeAgent:
         self.store = store
 
     def run(self, now, pairs, names):
+        """
+        :return:
+            list: (pair, side) to trade, side 1 to buy and -1 to short
+        """
         passed = []
         for pair in pairs:
             candles = self.market.candles(pair, self.config.candle_interval)
@@ -80,10 +85,10 @@ class VolumeAgent:
             row = spike_signals(candles, self.config).iloc[-1]
             if row['signal'] is None:
                 continue
-            self.store.log(now, self.name, 'PASS' if row['signal'] == PASS else 'SKIP',
-                           names[pair], describe(row, self.config))
-            if row['signal'] == PASS:
-                passed.append(pair)
+            side = SIDES.get(row['signal'])
+            self.store.log(now, self.name, 'PASS' if side else 'SKIP', names[pair], describe(row, self.config))
+            if side:
+                passed.append((pair, side))
 
         if not passed:
             self.store.log(now, self.name, 'WAIT', None, f'no spikes over {self.config.min_spike:g}x')
@@ -151,24 +156,28 @@ class ExecuteAgent:
         self.store = store
         self.broker = broker
 
-    def enter(self, now, now_ts, pair, name, ticker, value):
+    def enter(self, now, now_ts, pair, name, ticker, value, side=1):
+        verb = 'buy' if side == 1 else 'short'
         if self.config.limit_orders:
-            order = self.broker.place_limit_buy(now, now_ts, pair, name, ticker['bid'], value)
+            # wait on our side of the spread: a buy at the bid, a short at the ask
+            price = ticker['bid'] if side == 1 else ticker['ask']
+            order = self.broker.place_limit(now, now_ts, pair, name, price, value, side)
             self.store.log(now, self.name, 'WAIT', name,
-                           f'limit buy ${value:,.2f} @ {order["price"]:.8g}')
+                           f'limit {verb} ${value:,.2f} @ {order["price"]:.8g}')
             return
-        pos = self.broker.buy(now, now_ts, pair, name, ticker, value)
+        pos = self.broker.open(now, now_ts, pair, name, ticker, value, side)
         self.store.log(now, self.name, 'ENTER', name,
-                       f'${value:,.2f} @ {pos["entry_price"]:.8g}')
+                       f'{"" if side == 1 else "short "}${value:,.2f} @ {pos["entry_price"]:.8g}')
 
-    def exit_reason(self, pos, bid, now_ts):
-        return exit_reason(pos, bid, now_ts, self.config)
+    def exit_reason(self, pos, price, now_ts):
+        return exit_reason(pos, price, now_ts, self.config)
 
     def manage(self, now, now_ts, tickers):
         filled, cancelled = self.broker.check_orders(now, now_ts, tickers)
         for pair, pos in filled:
             self.store.log(now, self.name, 'ENTER', pos['symbol'],
-                           f'limit filled ${pos["cost"]:,.2f} @ {pos["entry_price"]:.8g}')
+                           f'limit {"buy" if pos["side"] == 1 else "short"} filled '
+                           f'${pos["cost"]:,.2f} @ {pos["entry_price"]:.8g}')
         for pair, order in cancelled:
             self.store.log(now, self.name, 'SKIP', order['symbol'],
                            f'limit not filled in {self.config.limit_wait_minutes} min, cancelled')
@@ -177,13 +186,14 @@ class ExecuteAgent:
             ticker = tickers.get(pair)
             if ticker is None:
                 continue
-            self.broker.mark(pair, ticker['bid'])
-            reason = self.exit_reason(pos, ticker['bid'], now_ts)
+            self.broker.mark(pair, ticker)
+            side = pos.get('side', 1)
+            reason = self.exit_reason(pos, self.broker.close_price(pos, ticker), now_ts)
             if reason:
-                # a take profit rests on the book as a limit sell, so it fills at its price
-                limit = pos['entry_price'] * (1 + self.config.take_profit) \
+                # a take profit rests on the book as a limit order, so it fills at its price
+                limit = pos['entry_price'] * (1 + side * self.config.take_profit) \
                     if reason == 'take profit' and self.config.limit_orders else None
-                trade = self.broker.sell(now, pair, ticker, reason, limit=limit)
+                trade = self.broker.close(now, now_ts, pair, ticker, reason, limit=limit)
                 sign = '+' if trade['pnl'] >= 0 else '-'
                 self.store.log(now, self.name, 'EXIT', pos['symbol'],
                                f'{sign}${abs(trade["pnl"]):,.2f} {reason}')

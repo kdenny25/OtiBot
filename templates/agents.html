@@ -236,10 +236,12 @@ function renderCalls(s) {
 function renderTables(s) {
     const waiting = (s.orders || []).length;
     $('open-count').textContent = `${s.positions.length} of ${s.config.max_open_positions}` +
-        (waiting ? ` · ${waiting} limit buy${waiting > 1 ? 's' : ''} waiting` : '');
+        (waiting ? ` · ${waiting} limit order${waiting > 1 ? 's' : ''} waiting` : '');
     O.setHTML($('positions'), s.positions.length ? s.positions.map(p => {
-        const pnl = p.units * p.last - p.cost - p.fees;
-        return `<tr><td class="fw-semibold">${O.esc(p.symbol)}</td><td class="text-end">${O.price(p.entry_price)}</td>
+        const short = p.side === -1;
+        // a short gains what the price fell since entry
+        const pnl = (short ? p.units * (p.entry_price - p.last) : p.units * p.last - p.cost) - p.fees;
+        return `<tr><td class="fw-semibold">${O.esc(p.symbol)}${short ? ' <span class="tag tag-SKIP">SHORT</span>' : ''}</td><td class="text-end">${O.price(p.entry_price)}</td>
             <td class="text-end">${O.price(p.last)}</td><td class="text-end">${O.money(p.cost)}</td>
             <td class="text-end fw-semibold ${O.cls(pnl)}">${O.signed(pnl)}</td></tr>`;
     }).join('') : '<tr><td colspan="5" class="o-empty">No open positions</td></tr>');

@@ -47,32 +47,42 @@ class Pipeline:
             self.execute.manage(now, now_ts, tickers)
 
             names = self.scan.pairs
-            if not self.market_ok(now, tickers, names):
+            sides = self.allowed_sides(now, tickers, names)
+            if not sides:
                 self.log.run(now, self.broker.equity(tickers), len(self.broker.positions))
                 return
             candidates = [p for p in watched if p not in self.broker.positions and p not in self.broker.orders]
-            for pair in self.volume.run(now, candidates, names):
-                if not self.risk.run(now, pair, tickers[pair], names[pair]):
+            for pair, side in self.volume.run(now, candidates, names):
+                if side not in sides or not self.risk.run(now, pair, tickers[pair], names[pair]):
                     continue
                 value = self.size.run(now, names[pair], self.broker, self.broker.equity(tickers))
                 if value:
-                    self.execute.enter(now, now_ts, pair, names[pair], tickers[pair], value)
+                    self.execute.enter(now, now_ts, pair, names[pair], tickers[pair], value, side)
 
             self.log.run(now, self.broker.equity(tickers), len(self.broker.positions))
         except Exception as e:
             self.store.log(now, 'LOG', 'ERROR', None, str(e)[:300])
             raise
 
-    def market_ok(self, now, tickers, names):
-        """ With market_filter on, no new buys while BTC is below today's open. """
+    def allowed_sides(self, now, tickers, names):
+        """
+        Sides new trades may take: 1 to buy, -1 to short. With market_filter
+        on, buys only while BTC is at or above today's open and shorts only
+        while it is below.
+        """
+        sides = {1, -1} if self.config.short_spikes else {1}
         if not self.config.market_filter:
-            return True
+            return sides
         btc = next((tickers[p] for p, n in names.items() if n in ('XBT/USD', 'BTC/USD') and p in tickers), None)
-        if btc is None or market_ok(btc['last'], btc.get('open')):
-            return True
-        self.store.log(now, 'RISK CHECK', 'WAIT', 'XBT/USD',
-                       f'BTC {btc["last"] / btc["open"] - 1:+.1%} today, no new buys')
-        return False
+        if btc is None:
+            return sides
+        allowed = {s for s in sides if market_ok(btc['last'], btc.get('open'), s)}
+        if allowed != sides and btc.get('open'):
+            change = btc['last'] / btc['open'] - 1
+            self.store.log(now, 'RISK CHECK', 'WAIT', 'XBT/USD',
+                           f'BTC {change:+.1%} today, ' + ('shorts only' if allowed else 'no new buys')
+                           if change < 0 else f'BTC {change:+.1%} today, buys only')
+        return allowed
 
     def apply_settings(self, values):
         """ Changes the live settings and keeps them across restarts. Returns what changed. """
