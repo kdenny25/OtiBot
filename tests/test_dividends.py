@@ -168,6 +168,16 @@ def test_income_targets():
     assert r['amount_needed'] == pytest.approx(20000)
 
 
+def test_dividend_per_dollar():
+    records = [record('PRICED', price=50.0, annual_dividend=2.0),
+               record('NOPRICE', dividend_yield=.04, price=None, annual_dividend=1.0),
+               record('BARE', dividend_yield=.025)]
+    by_symbol = {r['symbol']: r for r in screener.screen(records)}
+    assert by_symbol['PRICED']['dividend_per_dollar'] == pytest.approx(.04)
+    assert by_symbol['NOPRICE']['dividend_per_dollar'] == pytest.approx(.04)
+    assert by_symbol['BARE']['dividend_per_dollar'] == pytest.approx(.025)
+
+
 def test_empty_inputs():
     assert screener.screen([]) == []
     assert screener.screen(RECORDS, {'min_yield': 1}) == []
