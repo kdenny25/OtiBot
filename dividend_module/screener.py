@@ -116,6 +116,15 @@ def apply_filters(df, filters):
     return df[mask]
 
 
+def _per_dollar(df):
+    """ Annual dividend / price, falling back to the yield when either is missing. """
+    if {'annual_dividend', 'price'} <= set(df.columns):
+        price = df['price'].where(df['price'] > 0)
+        per_dollar = df['annual_dividend'] / price
+        return per_dollar.fillna(df['dividend_yield'])
+    return df['dividend_yield']
+
+
 def screen(records, filters=None, goal='balanced', dividend_weight=None,
            invest_amount=None, target_income=None):
     """
@@ -138,8 +147,8 @@ def screen(records, filters=None, goal='balanced', dividend_weight=None,
         target_income (float): adds amount_needed, the investment needed
                                for this yearly dividend income
     :return:
-        list of dict: matching records with score (0-100) and factor scores,
-                      best match first
+        list of dict: matching records with score (0-100), factor scores and
+                      dividend_per_dollar, best match first
     """
     if not records:
         return []
@@ -157,6 +166,9 @@ def screen(records, filters=None, goal='balanced', dividend_weight=None,
         df[f'score_{name}'] = factors[name].round(3)
 
     yield_ = df['dividend_yield']
+    # dollars of yearly dividend for each $1 invested at today's price. It is
+    # the same ratio as the yield, shown in dollars instead of a percent.
+    df['dividend_per_dollar'] = _per_dollar(df)
     if invest_amount:
         df['annual_income'] = invest_amount * yield_
         growth = df['dividend_growth_5y'].fillna(0).clip(lower=-.5)
