@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from agent_module.config import AgentConfig
-from agent_module.rules import SIDES, margin_cost, round_trip_cost, spike_signals
+from agent_module.rules import SIDES, margin_cost, order_fee, round_trip_cost, spike_signals
 from backtest_module.evaluations import max_drawdown, trade_stats
 
 DAY_CANDLES = 24 * 60
@@ -97,7 +97,7 @@ def simulate(candles, config=None, btc=None, spread=0.001):
         side = pos['side']
         fill = price if maker else price * (1 - side * (half + c.slippage))
         proceeds = value_of(pos, fill)
-        fee = pos['units'] * fill * (c.maker_fee if maker else c.taker_fee)
+        fee = order_fee(c, pos['units'] * fill, c.maker_fee if maker else c.taker_fee)
         if side == -1:
             fee += margin_cost(c, pos['cost'], (i - pos['entry_i'] + 1) * step)
         cash += proceeds - fee
@@ -110,9 +110,10 @@ def simulate(candles, config=None, btc=None, spread=0.001):
     def open_position(name, i, side, fill, value, maker, first_i):
         nonlocal cash
         fee_rate = c.maker_fee if maker else c.taker_fee
-        cash -= value * (1 + fee_rate)
+        fee = order_fee(c, value, fee_rate)
+        cash -= value + fee
         positions[name] = {'side': side, 'entry_i': i, 'first_i': first_i, 'entry_price': fill,
-                           'units': value / fill, 'cost': value, 'fees': value * fee_rate,
+                           'units': value / fill, 'cost': value, 'fees': fee,
                            'fee_rate': fee_rate, 'peak': fill}
 
     for i in range(len(times)):

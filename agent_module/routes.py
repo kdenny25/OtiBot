@@ -6,7 +6,7 @@ import time
 from flask import Blueprint, jsonify, render_template, request
 
 from agent_module import history
-from agent_module.config import AgentConfig, BASELINE, CANDLE_SIZES, IMPACT, RECOMMENDED, TUNABLE
+from agent_module.config import AgentConfig, BASELINE, CANDLE_SIZES, IMPACT, RECOMMENDED, TUNABLE, VENUES
 
 agents_bp = Blueprint('agents', __name__)
 
@@ -139,7 +139,8 @@ def _settings(config):
 def agents_settings():
     return jsonify({'live': _settings(runner.pipeline.config),
                     'baseline': {**_settings(AgentConfig()), **BASELINE},
-                    'recommended': {**_settings(runner.pipeline.config), **RECOMMENDED}})
+                    'recommended': {**_settings(runner.pipeline.config), **RECOMMENDED},
+                    'venues': VENUES})
 
 
 @agents_bp.route('/api/agents/settings', methods=['POST'])
@@ -261,3 +262,24 @@ def agents_impact():
                          'other': summary(simulate(candles, _config({**settings, 'candle_interval': size}),
                                                    spread=spread))})
     return jsonify({'current': current, 'rows': rows})
+
+
+@agents_bp.route('/api/agents/venues', methods=['POST'])
+def agents_venues():
+    """ Reruns the given settings with each venue's fees, to show what the broker alone changes. """
+    from agent_module.simulate import simulate
+    try:
+        candles, settings, spread = _sim_request()
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    rows = []
+    for key, venue in VENUES.items():
+        config = _config({**settings, 'venue': key})
+        stats = simulate(candles, config, spread=spread)['stats']
+        rows.append({'venue': key, 'label': venue['label'], 'note': venue['note'], 'shorts': venue['shorts'],
+                     'taker_fee': venue['taker_fee'], 'maker_fee': venue['maker_fee'],
+                     'trades': stats['trades'], 'win_rate': stats['win_rate'], 'return': stats['total_return'],
+                     'before_fees': stats['pnl_before_fees'], 'fees': stats['fees'],
+                     'pnl': stats['pnl_before_fees'] - stats['fees']})
+    return jsonify({'rows': rows, 'current': _config(settings).venue})

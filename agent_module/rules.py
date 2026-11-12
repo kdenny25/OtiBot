@@ -76,6 +76,14 @@ def market_ok(btc_price, btc_day_open, side=1):
     return btc_price >= btc_day_open if side == 1 else btc_price < btc_day_open
 
 
+def order_fee(config, value, rate):
+    """ Fee in USD on an order worth value, with the venue's minimum per order. """
+    floor = config.min_fee
+    if floor and config.fee_cap:
+        floor = min(floor, value * config.fee_cap)
+    return max(value * rate, floor)
+
+
 def round_trip_cost(config, entry_fee, side=1):
     """ Fees and slippage of getting in at entry_fee and out with a market order. """
     cost = entry_fee + config.taker_fee + config.slippage

@@ -417,3 +417,47 @@ def test_impact_route(monkeypatch):
     assert 'exits' in r['current'] and 'return' in rows[('market_filter', None)]['other']
     bad = client.post('/api/agents/impact', json={'settings': {'candle_interval': 7}})
     assert bad.status_code == 400
+
+
+def test_venue_sets_the_fees():
+    from agent_module.config import AgentConfig, VENUES
+    config = AgentConfig()
+    changed = config.update({'venue': 'binance_us'})
+    assert changed == {'venue': 'binance_us'}
+    assert (config.maker_fee, config.taker_fee) == (0.0, VENUES['binance_us']['taker_fee'])
+    config.update({'venue': 'kraken'})
+    assert (config.maker_fee, config.taker_fee) == (0.0025, 0.004)
+    with pytest.raises(ValueError):
+        config.update({'venue': 'nowhere'})
+
+
+def test_minimum_order_fee_is_capped():
+    from agent_module.config import AgentConfig
+    from agent_module.rules import order_fee
+    config = AgentConfig()
+    assert order_fee(config, 100, 0.004) == pytest.approx(0.4)
+    config.update({'venue': 'ibkr'})
+    # $1.75 minimum, but never more than 1% of the order
+    assert order_fee(config, 100, config.taker_fee) == pytest.approx(1.0)
+    assert order_fee(config, 500, config.taker_fee) == pytest.approx(1.75)
+    assert order_fee(config, 5000, config.taker_fee) == pytest.approx(9.0)
+
+
+def test_venues_route(monkeypatch):
+    from agent_module.routes import init_agents
+    pipeline = Pipeline(FakeMarket(), Store(':memory:'), AgentConfig())
+    app = Flask(__name__, template_folder='../templates')
+    init_agents(app, SocketIO(app), pipeline_factory=lambda: pipeline)
+    client = app.test_client()
+    pair = trend(80, step=0.004, spike_at={30})
+    pair['volume'] *= 1e5
+    monkeypatch.setattr(history, 'load', lambda: {'ETH/USD': pair})
+    assert 'binance_us' in client.get('/api/agents/settings').get_json()['venues']
+    r = client.post('/api/agents/venues', json={'settings': {'venue': 'alpaca'}}).get_json()
+    by = {v['venue']: v for v in r['rows']}
+    assert r['current'] == 'alpaca'
+    assert set(by) == {'kraken', 'kraken_2026', 'binance_us', 'alpaca', 'ibkr'}
+    # the same trades, so the cheaper broker keeps more
+    assert by['binance_us']['fees'] < by['kraken']['fees'] < by['kraken_2026']['fees']
+    assert by['binance_us']['pnl'] > by['kraken_2026']['pnl']
+    assert client.post('/api/agents/venues', json={'settings': {'venue': 'nowhere'}}).status_code == 400
