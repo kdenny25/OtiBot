@@ -31,9 +31,12 @@
             <div class="o-help" data-help-for="presets"></div>
 
             <div class="o-section">Cut costs</div>
-            <div class="form-check form-switch">
+            <label class="form-label" for="venue">Broker fees</label>
+            <select class="form-select" name="venue" id="venue"></select>
+            <div class="small muted mt-1" id="venue-note"></div>
+            <div class="form-check form-switch mt-3">
                 <input class="form-check-input" type="checkbox" name="limit_orders" id="limit_orders">
-                <label class="form-check-label small" for="limit_orders">Limit orders <span class="muted">· 0.25% maker fee, no slippage, may not fill</span></label>
+                <label class="form-check-label small" for="limit_orders">Limit orders <span class="muted">· <span id="maker-note">maker fee</span>, no slippage, may not fill</span></label>
             </div>
             <div class="form-check form-switch mt-2">
                 <input class="form-check-input" type="checkbox" name="trail_covers_costs" id="trail_covers_costs">
@@ -148,7 +151,7 @@
                     <table class="o-table">
                         <thead><tr><th></th><th class="text-end">Return</th><th class="text-end">Trades</th><th class="text-end">Win rate</th>
                             <th class="text-end">Avg win</th><th class="text-end">Avg loss</th><th class="text-end">Profit factor</th>
-                            <th class="text-end">Fees paid</th><th class="text-end">Max drawdown</th></tr></thead>
+                            <th class="text-end">P&amp;L before fees</th><th class="text-end">Fees paid</th><th class="text-end">Max drawdown</th></tr></thead>
                         <tbody id="compare"></tbody>
                     </table>
                 </div>
@@ -157,6 +160,23 @@
                     <div class="small text-2" id="apply-note">Happy with these? The live agents switch over on their next scan.</div>
                     <button class="btn btn-accent" id="apply"><i class="bi bi-check2-circle me-1"></i> Use for live agents</button>
                 </div>
+            </div>
+            <div class="o-card mb-3">
+                <div class="o-card-head flex-wrap">
+                    <h2 class="o-card-title">Same settings at each broker</h2>
+                    <span class="small muted">only the fees change</span>
+                </div>
+                <div id="venues-wait" class="small text-2 py-2"><span class="spinner-border spinner-border-sm text-warning me-2"></span>Testing each broker's fees…</div>
+                <div class="small mb-2 d-none" id="venues-verdict"></div>
+                <div class="o-scroll">
+                    <table class="o-table">
+                        <thead><tr><th>Broker</th><th class="text-end">Maker / taker</th><th class="text-end">Trades</th>
+                            <th class="text-end">P&amp;L before fees</th><th class="text-end">Fees paid</th>
+                            <th class="text-end">P&amp;L after fees</th><th class="text-end">Return</th></tr></thead>
+                        <tbody id="venues"></tbody>
+                    </table>
+                </div>
+                <div class="small muted mt-2">P&amp;L before fees still includes slippage and the spread. If it is negative, no broker makes these settings profitable. Fees are each broker's lowest volume tier, checked in November 2026.</div>
             </div>
             <div class="o-card mb-3">
                 <div class="o-card-head flex-wrap">
@@ -212,7 +232,8 @@ let presets = {}, poll;
 // what each setting does, shown under it while help is on
 const HELP = {
     presets: 'Recommended turns every new rule on. Live loads what your agents use now. Original loads the rules from before these changes.',
-    limit_orders: 'Buys with a limit order at the current bid instead of paying the ask. Kraken charges 0.25% instead of 0.40% and there is no slippage. The catch: if the price keeps rising, the order never fills and is cancelled after 5 minutes. Take profit also waits as a limit order. Stop losses still sell at market, so they always get out.',
+    venue: 'Which broker\'s fees the backtest and the paper agents charge. Prices still come from the same candles, so this shows what the broker alone changes. Binance.US, Alpaca and Interactive Brokers do not let you short crypto, so shorts there are hypothetical.',
+    limit_orders: 'Buys with a limit order at the current bid instead of paying the ask. The broker charges its lower maker fee instead of its taker fee and there is no slippage. The catch: if the price keeps rising, the order never fills and is cancelled after 5 minutes. Take profit also waits as a limit order. Stop losses still sell at market, so they always get out.',
     trail_covers_costs: 'The trailing stop normally turns on as soon as a trade is up by "Trail after up". With this on, it waits until the stop would sell above the entry price plus fees, so a trailing stop exit is never a loss.',
     confirm_spike: 'Instead of buying as soon as a spike candle closes, waits for the next 5-minute candle and only buys if it held at least half of the spike\'s gain. Filters out spikes that reverse right away, for a slightly later entry.',
     market_filter: 'Most coins move with BTC. With this on, the agents only buy while BTC is above its price at midnight UTC, and only short while it is below. Open trades are still managed as normal.',
@@ -241,7 +262,7 @@ function addHelp() {
         const help = document.createElement('div');
         help.className = 'o-help';
         help.textContent = text;
-        (el.closest('.form-check') || el).after(help);
+        (name === 'venue' ? $('venue-note') : el.closest('.form-check') || el).after(help);
     }
 }
 
@@ -259,13 +280,24 @@ function fill(values) {
         if (el.type === 'checkbox') el.checked = !!v;
         else el.value = el.hasAttribute('data-pct') ? +(v * 100).toFixed(3) : String(v);
     }
+    showVenue();
+}
+
+const feePct = v => +(v * 100).toFixed(3) + '%';
+
+function showVenue() {
+    const v = (presets.venues || {})[form.venue.value];
+    if (!v) return;
+    $('venue-note').textContent = `${feePct(v.maker_fee)} maker, ${feePct(v.taker_fee)} taker. ${v.note}` +
+        (!v.shorts && form.short_spikes.checked ? ' No crypto shorting here, so the short trades below could not be placed for real.' : '');
+    $('maker-note').textContent = `${feePct(v.maker_fee)} maker fee`;
 }
 
 function read() {
     const values = {};
     for (const el of form.elements) {
         if (!el.name || el.name === 'spread') continue;
-        values[el.name] = el.type === 'checkbox' ? el.checked
+        values[el.name] = el.type === 'checkbox' ? el.checked : el.name === 'venue' ? el.value
             : el.hasAttribute('data-pct') ? Number(el.value) / 100 : Number(el.value);
     }
     return values;
@@ -302,6 +334,7 @@ function row(label, r) {
         <td class="text-end">${s.trades}</td><td class="text-end">${O.pct(s.win_rate)}</td>
         <td class="text-end pos">${O.signed(s.avg_win)}</td><td class="text-end neg">${O.signed(s.avg_loss)}</td>
         <td class="text-end">${s.profit_factor == null ? '–' : s.profit_factor.toFixed(2)}</td>
+        <td class="text-end ${O.cls(s.pnl_before_fees)}">${O.signed(s.pnl_before_fees)}</td>
         <td class="text-end">${O.money(s.fees)}</td><td class="text-end">${O.pct(s.max_drawdown)}</td></tr>`;
 }
 
@@ -340,6 +373,46 @@ function renderImpact(data) {
             <td class="small">${exitChange(other, cur)}</td></tr>`;
     }).join('');
 }
+
+function renderVenues(data) {
+    $('venues-wait').classList.add('d-none');
+    $('venues').innerHTML = data.rows.map(v => `<tr${v.venue === data.current ? ' class="fw-semibold"' : ''}>
+        <td><div class="text-nowrap">${O.esc(v.label)}${v.venue === data.current ? ' <span class="tag tag-PASS">TESTED</span>' : ''}</div>
+            ${v.venue === data.current ? '' : `<button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-normal" data-venue="${v.venue}">Use these fees <i class="bi bi-arrow-right"></i></button>`}</td>
+        <td class="text-end text-nowrap">${feePct(v.maker_fee)} / ${feePct(v.taker_fee)}</td>
+        <td class="text-end">${v.trades}</td>
+        <td class="text-end ${O.cls(v.before_fees)}">${O.signed(v.before_fees)}</td>
+        <td class="text-end">${O.money(v.fees)}</td>
+        <td class="text-end ${O.cls(v.pnl)}">${O.signed(v.pnl)}</td>
+        <td class="text-end ${O.cls(v.return)}">${O.signedPct(v.return)}</td></tr>`).join('');
+    const best = data.rows.reduce((a, b) => b.pnl > a.pnl ? b : a);
+    const cur = data.rows.find(v => v.venue === data.current) || best;
+    const el = $('venues-verdict');
+    el.classList.remove('d-none');
+    el.innerHTML = !cur.trades ? 'These settings made no trades, so there is nothing to compare.'
+        : best.pnl > 0 ? `<i class="bi bi-check-circle-fill pos me-1"></i>These settings make money after fees at ${O.esc(best.label)} (${O.signed(best.pnl)}).`
+        : cur.before_fees > 0 ? `<i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>The trades make ${O.signed(cur.before_fees)} before fees, but fees take more than that at every broker here.`
+        : `<i class="bi bi-x-circle-fill neg me-1"></i>The trades lose ${O.signed(cur.before_fees)} before any fees. A cheaper broker shrinks the loss but cannot fix it: the entries and exits need to change.`;
+}
+
+async function loadVenues(settings, spread) {
+    $('venues').innerHTML = '';
+    $('venues-verdict').classList.add('d-none');
+    $('venues-wait').classList.remove('d-none');
+    try {
+        renderVenues(await O.postJSON('/api/agents/venues', {settings, spread}));
+    } catch (err) {
+        $('venues-wait').textContent = `Couldn't test each broker: ${err.message}`;
+    }
+}
+
+$('venues').addEventListener('click', e => {
+    const b = e.target.closest('[data-venue]');
+    if (!b) return;
+    form.venue.value = b.dataset.venue;
+    showVenue();
+    form.requestSubmit();
+});
 
 async function loadImpact(settings, spread) {
     $('impact').innerHTML = '';
@@ -397,7 +470,7 @@ form.addEventListener('submit', async e => {
             render(await O.postJSON('/api/agents/simulate', {settings, spread}));
             lastSettings = settings;
         });
-        loadImpact(settings, spread);
+        loadVenues(settings, spread).then(() => loadImpact(settings, spread));
     } catch (err) {
         $('error').textContent = err.message;
         $('error').classList.remove('d-none');
@@ -422,6 +495,8 @@ $('apply').onclick = () => O.withSpinner($('apply'), async () => {
         (n ? `${n} setting${n > 1 ? 's' : ''} changed. The live agents use them from their next scan.` : 'The live agents already use these settings.');
 });
 
+form.venue.addEventListener('change', showVenue);
+form.short_spikes.addEventListener('change', showVenue);
 addHelp();
 let helpOn = true;
 try { helpOn = localStorage.getItem('otibot-tune-help') !== '0'; } catch (e) {}
@@ -430,6 +505,7 @@ $('help-toggle').onclick = () => showHelp(!form.classList.contains('show-help'))
 
 O.getJSON('/api/agents/settings').then(s => {
     presets = s;
+    form.venue.innerHTML = Object.entries(s.venues).map(([k, v]) => `<option value="${k}">${O.esc(v.label)}</option>`).join('');
     fill(s.recommended);
 });
 loadHistory().then(() => O.ready());

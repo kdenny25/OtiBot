@@ -6,8 +6,11 @@ from dataclasses import dataclass, asdict, fields
 class AgentConfig:
     # paper account
     start_balance: float = 1000.0
+    venue: str = 'kraken'             # key in VENUES, sets the four fee fields below
     taker_fee: float = 0.004          # Kraken Pro starter tier taker fee
     maker_fee: float = 0.0025         # and maker fee, paid by resting limit orders
+    min_fee: float = 0.0              # smallest fee per order in USD, 0 is none
+    fee_cap: float = 0.0              # the minimum fee is never more than this share of the order, 0 is no cap
     slippage: float = 0.001           # extra 0.1% on top of crossing the spread
     margin_fee: float = 0.0002        # Kraken margin: 0.02% to open a short and every 4 hours it stays open
 
@@ -59,7 +62,11 @@ class AgentConfig:
             if f.name not in values or values[f.name] is None:
                 continue
             value = values[f.name]
-            if f.type in (bool, 'bool'):
+            if f.type in (str, 'str'):
+                value = str(value)
+                if f.name == 'venue' and value not in VENUES:
+                    raise ValueError(f'unknown venue {value}')
+            elif f.type in (bool, 'bool'):
                 value = value if isinstance(value, bool) else str(value).lower() in ('1', 'true', 'yes', 'on')
             elif f.type in (int, 'int'):
                 value = int(float(value))
@@ -68,7 +75,32 @@ class AgentConfig:
             if getattr(self, f.name) != value:
                 changed[f.name] = value
                 setattr(self, f.name, value)
+        if 'venue' in changed:
+            for name in VENUE_FEES:
+                setattr(self, name, VENUES[self.venue][name])
         return changed
+
+
+# Lowest volume tier fees at each venue, read from their fee pages in November
+# 2026. shorts is whether the venue lets a small US account short crypto.
+VENUE_FEES = ('taker_fee', 'maker_fee', 'min_fee', 'fee_cap')
+VENUES = {
+    'kraken': {'label': 'Kraken Pro, old rates', 'taker_fee': 0.004, 'maker_fee': 0.0025,
+               'min_fee': 0.0, 'fee_cap': 0.0, 'shorts': True,
+               'note': 'What the paper agents have used so far.'},
+    'kraken_2026': {'label': 'Kraken Pro, reported since July 2026', 'taker_fee': 0.008, 'maker_fee': 0.004,
+                    'min_fee': 0.0, 'fee_cap': 0.0, 'shorts': True,
+                    'note': 'Reported for under $2,500 traded in 30 days. Not confirmed on Kraken\'s own page.'},
+    'binance_us': {'label': 'Binance.US', 'taker_fee': 0.00019, 'maker_fee': 0.0,
+                   'min_fee': 0.0, 'fee_cap': 0.0, 'shorts': False,
+                   'note': 'All spot pairs since April 2026. Not available in every state.'},
+    'alpaca': {'label': 'Alpaca', 'taker_fee': 0.0025, 'maker_fee': 0.0015,
+               'min_fee': 0.0, 'fee_cap': 0.0, 'shorts': False,
+               'note': '56 crypto pairs, and a free paper trading account.'},
+    'ibkr': {'label': 'Interactive Brokers', 'taker_fee': 0.0018, 'maker_fee': 0.0018,
+             'min_fee': 1.75, 'fee_cap': 0.01, 'shorts': False,
+             'note': 'At least $1.75 an order, capped at 1% of the order, so small orders pay about 1%.'},
+}
 
 
 # the original rules, before the changes below
@@ -87,7 +119,7 @@ IMPACT = {'limit_orders': True, 'trail_covers_costs': True, 'confirm_spike': Tru
 CANDLE_SIZES = [5, 15, 60]
 
 # settings the page can change, the rest stay fixed
-TUNABLE = ['limit_orders', 'trail_covers_costs', 'max_entry_move', 'confirm_spike', 'market_filter',
+TUNABLE = ['venue', 'limit_orders', 'trail_covers_costs', 'max_entry_move', 'confirm_spike', 'market_filter',
            'short_spikes', 'candle_interval',
            'stale_minutes', 'stale_move', 'min_spike', 'take_profit', 'stop_loss', 'trail_trigger',
            'trail_pct', 'max_hold_minutes', 'max_open_positions', 'max_position_pct']

@@ -5,7 +5,7 @@
 #
 # A short sets aside its value as collateral, like a long's cost, and pays
 # Kraken's margin fee to open and every 4 hours it stays open.
-from agent_module.rules import margin_cost
+from agent_module.rules import margin_cost, order_fee
 
 
 class PaperBroker:
@@ -50,7 +50,7 @@ class PaperBroker:
             fill, fee_rate = ticker['ask'] * (1 + c.slippage), c.taker_fee
         else:
             fill, fee_rate = ticker['bid'] * (1 - c.slippage), c.taker_fee
-        fee = value * fee_rate
+        fee = order_fee(c, value, fee_rate)
         start = self.close_price({'side': side}, ticker)
         pos = {'symbol': symbol,
                'side': side,
@@ -123,7 +123,7 @@ class PaperBroker:
         else:
             fill, fee_rate = self.close_price(pos, ticker) * (1 - side * c.slippage), c.taker_fee
         proceeds = self.value(pos, fill)
-        fee = pos['units'] * fill * fee_rate
+        fee = order_fee(c, pos['units'] * fill, fee_rate)
         if side == -1:
             fee += margin_cost(c, pos['cost'], now_ts - pos['entry_ts'])
         self.cash += proceeds - fee
