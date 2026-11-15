@@ -461,3 +461,52 @@ def test_venues_route(monkeypatch):
     assert by['binance_us']['fees'] < by['kraken']['fees'] < by['kraken_2026']['fees']
     assert by['binance_us']['pnl'] > by['kraken_2026']['pnl']
     assert client.post('/api/agents/venues', json={'settings': {'venue': 'nowhere'}}).status_code == 400
+
+
+# chart of where the rules fired
+
+def test_pair_chart_marks_trades_levels_and_spikes():
+    from agent_module.chart import pair_chart
+    pair = trend(80, step=0.004, spike_at={30})
+    config = AgentConfig(min_quote_volume=0)
+    trades = simulate({'ETH/USD': pair}, config)['trades']
+    chart = pair_chart(pair, trades, config)
+    assert len(chart['t']) == len(chart['c']) == len(chart['threshold']) == 80
+    assert chart['t'][0] == pair['time'][0].isoformat()
+    # the spike candle is over the threshold and its signal was traded on the next candle
+    assert chart['v'][30] >= chart['threshold'][30]
+    assert [s['spike_i'] for s in chart['signals']] == [30] and chart['signals'][0]['traded']
+    t = chart['trades'][0]
+    assert t['entry_i'] == 31 and t['reason'] == 'take profit' and t['exit_i'] > t['entry_i']
+    assert t['target'] == pytest.approx(t['entry_price'] * 1.04, rel=1e-5)
+    assert t['stop'] == pytest.approx(t['entry_price'] * 0.98, rel=1e-5)
+    # the trailing stop turns on once the trade is up 1.5% and only rises
+    trail = [v for v in t['trail'] if v is not None]
+    assert trail and trail == sorted(trail)
+    assert len(t['trail']) == t['exit_i'] - t['trail_start'] + 1
+
+
+def test_pair_chart_flags_skipped_spikes():
+    from agent_module.chart import pair_chart
+    pair = trend(80, step=0.004, spike_at={30})
+    config = AgentConfig(min_quote_volume=0)
+    chart = pair_chart(pair, [], config)
+    assert not chart['signals'][0]['traded'] and 'not taken' in chart['signals'][0]['text']
+
+
+def test_chart_route(monkeypatch):
+    from app import app
+    client = app.test_client()
+    monkeypatch.setattr(history, 'load', lambda: {})
+    assert client.post('/api/agents/chart', json={}).status_code == 400
+    pair = trend(80, step=0.004, spike_at={30})
+    pair['volume'] *= 1e5
+    flat = trend(80)
+    flat['volume'] *= 1e5
+    monkeypatch.setattr(history, 'load', lambda: {'ETH/USD': pair, 'SOL/USD': flat})
+    r = client.post('/api/agents/chart', json={'settings': {'limit_orders': False}}).get_json()
+    assert r['pair'] == 'ETH/USD' and r['pairs'] == [{'pair': 'ETH/USD', 'trades': 1}]
+    assert r['trades'][0]['reason'] == 'take profit'
+    r = client.post('/api/agents/chart', json={'pair': 'SOL/USD'}).get_json()
+    assert r['pair'] == 'SOL/USD' and r['trades'] == []
+    assert client.post('/api/agents/chart', json={'pair': 'NOPE/USD'}).status_code == 400

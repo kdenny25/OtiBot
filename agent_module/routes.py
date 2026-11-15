@@ -230,6 +230,30 @@ def agents_simulate():
     return jsonify({**results, 'pairs': len(candles), 'start': first.isoformat(), 'end': last.isoformat()})
 
 
+@agents_bp.route('/api/agents/chart', methods=['POST'])
+def agents_chart():
+    """
+    One pair's candles with every trade the given settings made on it and
+    the levels each exit rule watched. The whole test reruns so position
+    limits across pairs match the results table.
+    """
+    from agent_module.chart import pair_chart, traded_pairs
+    from agent_module.simulate import simulate
+    try:
+        candles, settings, spread = _sim_request()
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    config = _config(settings)
+    trades = simulate(candles, config, spread=spread)['trades']
+    pairs = traded_pairs(trades)
+    pair = (request.get_json(force=True) or {}).get('pair') or (pairs[0][0] if pairs else next(iter(candles)))
+    if pair not in candles:
+        return jsonify({'error': f'No history for {pair}'}), 400
+    chart = pair_chart(candles[pair], [t for t in trades if t['symbol'] == pair], config)
+    return jsonify({**chart, 'pair': pair, 'pairs': [{'pair': p, 'trades': n} for p, n in pairs]})
+
+
 @agents_bp.route('/api/agents/impact', methods=['POST'])
 def agents_impact():
     """

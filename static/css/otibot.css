@@ -235,3 +235,10 @@ a { color: var(--o-accent); }
     .o-skel::after, #o-progress::before, .o-flash, .o-new td, .o-bar.indeterminate > span { animation: none; }
 }
 .o-stat .o-skel, .o-card .o-stat .o-skel { background: var(--o-border) !important; }
+
+/* key under the trade chart */
+.o-keys { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .76rem; color: var(--o-text-2); }
+.o-keys span { display: inline-flex; align-items: center; gap: 6px; }
+.o-keys i { display: inline-block; width: 16px; height: 0; }
+.o-click { cursor: pointer; }
+.o-click:hover td { background: var(--o-surface-2); }
