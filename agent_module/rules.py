@@ -50,7 +50,9 @@ def spike_signals(candles, config):
         signal[trade & np.where(green, close < mid, close > mid)] = FADED
     if config.max_entry_move:
         signal[trade & (move.abs() > config.max_entry_move).to_numpy()] = LATE
-    return pd.DataFrame({'spike': spike.to_numpy(), 'move': move.to_numpy(), 'signal': signal},
+    # object dtype keeps None as None: pandas 3 would turn a column of strings and None into str with NaN
+    return pd.DataFrame({'spike': spike.to_numpy(), 'move': move.to_numpy(),
+                         'signal': pd.Series(signal, index=candles.index, dtype=object)},
                         index=candles.index)
 
 
@@ -68,25 +70,48 @@ def describe(row, config):
 
 def market_ok(btc_price, btc_day_open, side=1):
     """
-    With the market filter on, longs need BTC at or above today's open and
-    shorts need it below. True when either price is unknown.
+    With the market filter on, longs need the benchmark (BTC for crypto,
+    SPY for stocks) at or above today's open and shorts need it below. True
+    when either price is unknown.
     """
     if not btc_price or not btc_day_open:
         return True
     return btc_price >= btc_day_open if side == 1 else btc_price < btc_day_open
 
 
-def order_fee(config, value, rate):
-    """ Fee in USD on an order worth value, with the venue's minimum per order. """
+TAF_CAP = 8.30       # FINRA trading activity fee, most per order
+
+
+def order_fee(config, value, rate, units=0.0, sell=False):
+    """
+    Fee in USD on an order worth value for units shares or coins.
+
+    The commission is value * rate plus per_share_fee a share, at least the
+    venue's min_fee, which is never more than fee_cap of the order. With a
+    per share fee, fee_cap also caps the whole commission (IBKR Pro). A stock
+    sale, including opening a short, also pays the SEC and FINRA fees.
+    """
+    fee = value * rate + units * config.per_share_fee
     floor = config.min_fee
     if floor and config.fee_cap:
         floor = min(floor, value * config.fee_cap)
-    return max(value * rate, floor)
+    fee = max(fee, floor)
+    if config.per_share_fee and config.fee_cap:
+        fee = min(fee, value * config.fee_cap)
+    if sell:
+        fee += value * config.sell_fee + min(units * config.sell_fee_per_share, TAF_CAP)
+    return fee
 
 
-def round_trip_cost(config, entry_fee, side=1):
-    """ Fees and slippage of getting in at entry_fee and out with a market order. """
-    cost = entry_fee + config.taker_fee + config.slippage
+def round_trip_cost(config, entry_fee, side=1, price=None):
+    """
+    Fees and slippage of getting in at entry_fee and out with a market order,
+    as a share of the trade. price adds per share fees, which are a bigger
+    share of a cheap stock.
+    """
+    cost = entry_fee + config.taker_fee + config.slippage + config.sell_fee
+    if price and config.per_share_fee:
+        cost += 2 * config.per_share_fee / price
     return cost + 2 * config.margin_fee if side == -1 else cost
 
 
@@ -104,7 +129,7 @@ def trail_level(pos, config):
         return None
     level = peak * (1 - side * config.trail_pct)
     if config.trail_covers_costs:
-        cost = round_trip_cost(config, pos.get('fee_rate', config.taker_fee), side)
+        cost = round_trip_cost(config, pos.get('fee_rate', config.taker_fee), side, entry)
         if side * (level / entry - 1) < cost:
             return None
     return level

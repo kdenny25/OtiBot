@@ -1,5 +1,10 @@
 # Agent backtest: replays the agent rules over historical candles for many
-# pairs at once, with the same sizing, position limit, fees and exits.
+# pairs or stocks at once, with the same sizing, position limit, fees and exits.
+#
+# Stocks only trade in regular hours: no entries in the first
+# skip_open_minutes or on the day's last candle, and with flat_at_close
+# every trade closes on that last candle. Hold times count market minutes,
+# so a trade held overnight doesn't run out its clock while the market is shut.
 #
 # Each candle stands in for a cycle. Signals use closed candles only and
 # fill on the next one: a market order at its open, a limit order at the
@@ -9,19 +14,26 @@
 import numpy as np
 import pandas as pd
 
+from agent_module import sessions
 from agent_module.config import AgentConfig
 from agent_module.rules import SIDES, margin_cost, order_fee, round_trip_cost, spike_signals
 from backtest_module.evaluations import max_drawdown, trade_stats
 
-DAY_CANDLES = 24 * 60
+DAY_CANDLES = 24 * 60           # minutes in a crypto day
+STOCK_DAY = 390                 # minutes in a regular stock session
+BENCHMARKS = {'crypto': 'BTC/USD', 'stocks': 'SPY'}
 
 
-def resample(df, minutes):
-    """ Joins candles into bigger ones, e.g. 5 minute candles into 15 minute ones. """
+def resample(df, minutes, stocks=False):
+    """
+    Joins candles into bigger ones, e.g. 5 minute candles into 15 minute ones.
+    Stock hours start at 9:30, so with stocks hour candles start on the half hour.
+    """
     df = df.drop_duplicates('time').set_index('time').sort_index()
     if len(df) < 2 or (df.index[1] - df.index[0]) >= pd.Timedelta(minutes=minutes):
         return df.reset_index()
-    out = df.resample(f'{minutes}min').agg({'open': 'first', 'high': 'max', 'low': 'min',
+    offset = '30min' if stocks and minutes >= 60 else None
+    out = df.resample(f'{minutes}min', offset=offset).agg({'open': 'first', 'high': 'max', 'low': 'min',
                                             'close': 'last', 'volume': 'sum'})
     return out.dropna(subset=['close']).reset_index()
 
@@ -37,7 +49,8 @@ def _arrays(df, times, config):
     traded = df['close'].notna().to_numpy()
     side = np.array([SIDES.get(s, 0) for s in signals['signal']]) * traded
     volume_usd = (df['volume'] * df['close']).fillna(0)
-    window = max(1, DAY_CANDLES // config.candle_interval)
+    day = STOCK_DAY if config.market == 'stocks' else DAY_CANDLES
+    window = max(1, day // config.candle_interval)
     return {'open': df['open'].to_numpy(), 'high': df['high'].to_numpy(),
             'low': df['low'].to_numpy(), 'close': df['close'].to_numpy(),
             'traded': traded, 'side': side,
@@ -45,10 +58,15 @@ def _arrays(df, times, config):
             'volume_24h': volume_usd.rolling(window, min_periods=1).sum().to_numpy()}
 
 
-def _btc_up(btc, times):
-    """ True where BTC closed at or above that UTC day's open. """
-    df = btc.drop_duplicates('time').set_index('time').reindex(times).ffill()
-    day_open = df.groupby(df.index.normalize())['open'].transform('first')
+def _btc_up(btc, times, days=None):
+    """
+    True where the benchmark closed at or above that day's open: the UTC day
+    for crypto, or with days (each candle's trading day) the stock session.
+    """
+    df = btc.drop_duplicates('time').set_index('time').reindex(times)
+    key = df.index.normalize() if days is None else days
+    day_open = df['open'].groupby(key).transform('first')
+    df = df.ffill()
     return (df['close'] >= day_open).fillna(True).to_numpy()
 
 
@@ -58,8 +76,9 @@ def simulate(candles, config=None, btc=None, spread=0.001):
         candles (dict): pair name to a DataFrame of time, open, high, low,
                         close, volume, joined into config.candle_interval
                         minute candles when smaller
-        btc (pandas.DataFrame): BTC/USD candles for the market filter,
-                                defaults to candles['BTC/USD'] when present
+        btc (pandas.DataFrame): benchmark candles for the market filter,
+                                defaults to candles['BTC/USD'] for crypto or
+                                candles['SPY'] for stocks when present
         spread (float): assumed bid/ask spread, history has no quotes
     :return:
         dict: stats, equity (time, value), trades and exits (count and pnl by reason)
@@ -67,15 +86,22 @@ def simulate(candles, config=None, btc=None, spread=0.001):
     c = config or AgentConfig()
     if not candles:
         raise ValueError('No candle history to test on')
-    candles = {name: resample(df, c.candle_interval) for name, df in candles.items()}
+    stocks = c.market == 'stocks'
+    candles = {name: resample(df, c.candle_interval, stocks) for name, df in candles.items()}
     times = pd.DatetimeIndex(sorted(set().union(*(df['time'] for df in candles.values()))))
     data = {name: _arrays(df, times, c) for name, df in candles.items()}
-    if btc is None:
-        btc = candles.get('BTC/USD')
+    if stocks:
+        flags = sessions.candle_flags(times, c.candle_interval, c.skip_open_minutes)
+        can_enter, last_candle = flags['can_enter'], flags['last'] & c.flat_at_close
     else:
-        btc = resample(btc, c.candle_interval)
+        flags = None
+        can_enter, last_candle = np.ones(len(times), bool), np.zeros(len(times), bool)
+    if btc is None:
+        btc = candles.get(BENCHMARKS[c.market])
+    else:
+        btc = resample(btc, c.candle_interval, stocks)
     if c.market_filter and btc is not None:
-        btc_up = _btc_up(btc, times)
+        btc_up = _btc_up(btc, times, flags['day'] if stocks else None)
         allowed = {1: btc_up, -1: ~btc_up}
     else:
         allowed = {1: np.ones(len(times), bool), -1: np.ones(len(times), bool)}
@@ -97,7 +123,8 @@ def simulate(candles, config=None, btc=None, spread=0.001):
         side = pos['side']
         fill = price if maker else price * (1 - side * (half + c.slippage))
         proceeds = value_of(pos, fill)
-        fee = order_fee(c, pos['units'] * fill, c.maker_fee if maker else c.taker_fee)
+        fee = order_fee(c, pos['units'] * fill, c.maker_fee if maker else c.taker_fee,
+                        pos['units'], sell=side == 1)
         if side == -1:
             fee += margin_cost(c, pos['cost'], (i - pos['entry_i'] + 1) * step)
         cash += proceeds - fee
@@ -110,7 +137,7 @@ def simulate(candles, config=None, btc=None, spread=0.001):
     def open_position(name, i, side, fill, value, maker, first_i):
         nonlocal cash
         fee_rate = c.maker_fee if maker else c.taker_fee
-        fee = order_fee(c, value, fee_rate)
+        fee = order_fee(c, value, fee_rate, value / fill, sell=side == -1)
         cash -= value + fee
         positions[name] = {'side': side, 'entry_i': i, 'first_i': first_i, 'entry_price': fill,
                            'units': value / fill, 'cost': value, 'fees': fee,
@@ -127,6 +154,7 @@ def simulate(candles, config=None, btc=None, spread=0.001):
                 d = data[name]
                 side = int(d['side'][i - 1])
                 if (name in positions or name in orders or not allowed[side][i - 1] or not d['traded'][i]
+                        or not can_enter[i]
                         or d['volume_24h'][i - 1] < c.min_quote_volume
                         or len(positions) + len(orders) >= c.max_open_positions):
                     continue
@@ -150,7 +178,7 @@ def simulate(candles, config=None, btc=None, spread=0.001):
             if d['traded'][i] and hit:
                 del orders[name]
                 open_position(name, i, order['side'], order['price'], order['value'], True, i + 1)
-            elif i - order['placed'] + 1 >= wait:
+            elif i - order['placed'] + 1 >= wait or last_candle[i]:
                 del orders[name]
 
         # 3. exits, using the candle's range in the order prices most likely moved
@@ -188,6 +216,12 @@ def simulate(candles, config=None, btc=None, spread=0.001):
                 close(name, i, cl, 'went nowhere')
             elif held >= c.max_hold_minutes * 60:
                 close(name, i, cl, 'time limit')
+
+        # 4. stocks with flat_at_close: nothing held into the night
+        if last_candle[i]:
+            for name in list(positions):
+                if data[name]['traded'][i]:
+                    close(name, i, data[name]['close'][i], 'market close')
 
         marked = cash
         for name, pos in positions.items():

@@ -9,7 +9,7 @@ from agent_module.rules import SIDES, describe, exit_reason, spike_signals
 
 
 class ScanAgent:
-    """ Picks the most traded USD pairs and notices new listings. """
+    """ Picks the most traded USD pairs, or stocks, and notices new listings. """
     name = 'SCAN'
     pairs_ttl = 3600
 
@@ -41,8 +41,9 @@ class ScanAgent:
             if pair in tickers and pair not in watched:
                 watched.append(pair)
 
+        noun = 'stocks' if self.config.market == 'stocks' else 'USD pairs'
         self.store.log(now, self.name, 'PASS', None,
-                       f'watching {len(watched)} of {len(self.pairs)} USD pairs')
+                       f'watching {len(watched)} of {len(self.pairs)} {noun}')
         return watched, tickers
 
 
@@ -171,6 +172,19 @@ class ExecuteAgent:
 
     def exit_reason(self, pos, price, now_ts):
         return exit_reason(pos, price, now_ts, self.config)
+
+    def close_all(self, now, now_ts, tickers, reason='market close'):
+        """ Cancels waiting limit orders and closes every trade at market, e.g. before the stock market shuts. """
+        for pair in list(self.broker.orders):
+            order = self.broker.cancel(pair)
+            self.store.log(now, self.name, 'SKIP', order['symbol'], f'limit cancelled, {reason}')
+        for pair, pos in list(self.broker.positions.items()):
+            ticker = tickers.get(pair)
+            if ticker is None:
+                continue
+            trade = self.broker.close(now, now_ts, pair, ticker, reason)
+            sign = '+' if trade['pnl'] >= 0 else '-'
+            self.store.log(now, self.name, 'EXIT', pos['symbol'], f'{sign}${abs(trade["pnl"]):,.2f} {reason}')
 
     def manage(self, now, now_ts, tickers):
         filled, cancelled = self.broker.check_orders(now, now_ts, tickers)

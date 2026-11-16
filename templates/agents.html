@@ -1,10 +1,11 @@
 {% extends "layout.html" %}
-{% block title %}Agents{% endblock %}
-{% block page_title %}Agents{% endblock %}
-{% block page_sub %}Six agents scan Kraken USD pairs every minute and paper trade volume spikes.{% endblock %}
+{% block title %}{{ m.title }} agents{% endblock %}
+{% block page_title %}{{ m.title }} agents{% endblock %}
+{% block page_sub %}{{ m.scan }}{% endblock %}
 {% block actions %}
 <span class="o-pill warn"><i class="bi bi-shield-check"></i> Paper mode</span>
-<a href="/agents/tune" class="btn btn-ghost"><i class="bi bi-sliders me-1"></i> Tune</a>
+{% if m.key == 'stocks' %}<span class="o-pill" id="session" title="Regular hours, {{ m.hours }}"><i class="bi bi-clock"></i> market hours</span>{% endif %}
+<a href="{{ m.page }}/tune" class="btn btn-ghost"><i class="bi bi-sliders me-1"></i> Tune</a>
 <span class="o-pill" id="status"><span class="dot"></span>stopped</span>
 <button class="btn btn-accent" id="start"><i class="bi bi-play-fill me-1"></i> Start</button>
 <button class="btn btn-ghost d-none" id="stop"><i class="bi bi-pause-fill me-1"></i> Stop</button>
@@ -106,7 +107,7 @@
             <div class="o-card-head"><h2 class="o-card-title">Open positions</h2><span class="small muted" id="open-count"></span></div>
             <div class="o-scroll">
                 <table class="o-table">
-                    <thead><tr><th>Pair</th><th class="text-end">Entry</th><th class="text-end">Last</th><th class="text-end">Size</th><th class="text-end">P&amp;L</th></tr></thead>
+                    <thead><tr><th>{{ m.noun|capitalize }}</th><th class="text-end">Entry</th><th class="text-end">Last</th><th class="text-end">Size</th><th class="text-end">P&amp;L</th></tr></thead>
                     <tbody id="positions"><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr></tbody>
                 </table>
             </div>
@@ -127,7 +128,7 @@
             <div class="o-card-head"><h2 class="o-card-title">Recent trades</h2></div>
             <div class="o-scroll">
                 <table class="o-table">
-                    <thead><tr><th>Pair</th><th>Closed</th><th class="text-end">Entry</th><th class="text-end">Exit</th>
+                    <thead><tr><th>{{ m.noun|capitalize }}</th><th>Closed</th><th class="text-end">Entry</th><th class="text-end">Exit</th>
                         <th class="text-end">Slippage</th><th class="text-end">Fees</th><th>Reason</th><th class="text-end">P&amp;L</th></tr></thead>
                     <tbody id="trades"><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr><tr class="o-skel-row"><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td><td><span class="o-skel w-100"></span></td></tr></tbody>
                 </table>
@@ -171,13 +172,23 @@ function tick() {
         $('cycle-text').textContent = 'each setup runs left to right';
     } else if (state.cycling || !state.last_cycle) {
         $('cycle-bar').classList.add('indeterminate');
-        $('cycle-text').textContent = 'scanning pairs now…';
+        $('cycle-text').textContent = 'scanning {{ m.nouns }} now…';
     } else {
         $('cycle-bar').classList.remove('indeterminate');
         const left = Math.max(0, state.cycle_seconds - (Date.now() / 1000 - state.last_cycle));
         bar.style.width = (100 * (1 - left / state.cycle_seconds)) + '%';
-        $('cycle-text').textContent = left > 0.5 ? `next scan in ${Math.ceil(left)}s` : 'scanning pairs now…';
+        $('cycle-text').textContent = left > 0.5 ? `next scan in ${Math.ceil(left)}s` : 'scanning {{ m.nouns }} now…';
     }
+}
+
+// stocks only: whether the market is open, and when it opens or closes
+function renderSession(s) {
+    const el = $('session');
+    if (!el || !s.session) return;
+    const x = s.session, hm = m => m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`;
+    el.className = 'o-pill' + (x.open ? ' live' : '');
+    O.setHTML(el, x.open ? `<span class="dot"></span>market open · closes in ${hm(x.minutes_left)}`
+        : `<i class="bi bi-moon"></i> market closed · opens ${new Date(x.next_open).toLocaleString(undefined, {weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'})} ET`);
 }
 
 function renderPipeline(s) {
@@ -259,6 +270,7 @@ function renderTables(s) {
 function render(s) {
     state = s;
     renderStatus();
+    renderSession(s);
     tick();
     $('error').classList.toggle('d-none', !s.error);
     $('error').textContent = s.error ? 'Last scan failed: ' + s.error : '';
@@ -298,20 +310,21 @@ function render(s) {
     O.ready();
 }
 
-const load = (quiet = true) => O.getJSON('/api/agents/state', {quiet}).then(render);
+const API = '{{ m.api }}';
+const load = (quiet = true) => O.getJSON(API + '/state', {quiet}).then(render);
 const post = (btn, path) => O.withSpinner(btn, () => O.postJSON(path)).then(() => load()).catch(e => alert(e.message));
 
-$('start').onclick = e => post(e.currentTarget, '/api/agents/start');
-$('stop').onclick = e => post(e.currentTarget, '/api/agents/stop');
+$('start').onclick = e => post(e.currentTarget, API + '/start');
+$('stop').onclick = e => post(e.currentTarget, API + '/stop');
 $('reset').onclick = e => {
-    if (confirm('Clear all paper trades and the event log and start over?')) post(e.currentTarget, '/api/agents/reset');
+    if (confirm('Clear all paper trades and the event log and start over?')) post(e.currentTarget, API + '/reset');
 };
 
 load(false);
 if (window.io) {
     const socket = io();
-    socket.on('agent_state', render);
-    socket.on('agent_cycle', () => { if (state) { state.cycling = true; renderStatus(); tick(); } });
+    socket.on('{{ m.event }}state', render);
+    socket.on('{{ m.event }}cycle', () => { if (state) { state.cycling = true; renderStatus(); tick(); } });
 }
 setInterval(tick, 1000);
 // fallback in case the socket drops or its script didn't load
