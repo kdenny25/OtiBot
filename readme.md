@@ -155,3 +155,27 @@ point it at yours. Build the image with `docker build -t otibot .`, then
     docker run -d -p 5000:5000 --env-file .env \
         -e DB_HOST=host.docker.internal --add-host host.docker.internal:host-gateway \
         -v otibot-agents:/app/agent_module/data otibot
+
+# Crypto and stocks
+
+The app has two sections, Crypto and Stocks, each with its own agents
+dashboard, tuning page and backtest. Both run the same six agents, rules,
+paper broker and backtest engine (`agent_module`); `agent_module/markets.py`
+holds what differs between them.
+
+| | Crypto | Stocks |
+|---|---|---|
+| Pages | `/agents`, `/agents/tune`, `/backtest` | `/stocks/agents`, `/stocks/agents/tune`, `/stocks/backtest` |
+| Live prices | Kraken | Yahoo Finance (last trade, assumed spread) |
+| History | Coinbase, up to 90 days of 5 minute candles | Yahoo Finance, up to 60 days, regular hours |
+| Hours | 24/7 | 9:30 to 4:00 New York time, NYSE holidays and early closes in `agent_module/sessions.py` |
+| Brokers | Kraken, Binance.US, Alpaca, IBKR | Alpaca, Schwab, IBKR Lite (no commission), IBKR Pro ($0.005 a share, $1 minimum) plus the SEC and FINRA fees on every sale |
+| Market filter | BTC vs its midnight UTC open | SPY vs its 9:30 open |
+
+Stock-only settings: close every trade before the bell (on by default, so
+nothing is held overnight) and no new trades for the first minutes after
+the open, when every stock's volume looks like a spike. The stock agents
+sleep while the market is closed. Each section keeps its own paper account
+in `agent_module/data/agents.db` and `agents_stocks.db`. Set
+`STOCK_AGENTS_AUTOSTART=1` to start the stock agents with the app, like
+`AGENTS_AUTOSTART` for crypto.

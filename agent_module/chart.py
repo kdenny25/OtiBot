@@ -21,7 +21,7 @@ def pair_chart(candles, trades, config):
               candle needs to count as a spike), signals (every scored spike)
               and trades with their entry/exit candle and exit levels
     """
-    df = resample(candles, config.candle_interval).drop_duplicates('time') \
+    df = resample(candles, config.candle_interval, config.market == 'stocks').drop_duplicates('time') \
         .sort_values('time').reset_index(drop=True)
     times = pd.DatetimeIndex(df['time'])
     volume = df['volume'].astype(float)

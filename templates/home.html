@@ -1,10 +1,11 @@
 {% extends "layout.html" %}
 {% block title %}Overview{% endblock %}
 {% block page_title %}Overview{% endblock %}
-{% block page_sub %}Your agents, backtests and dividend picks in one place.{% endblock %}
+{% block page_sub %}Your crypto and stock agents, backtests and dividend picks in one place.{% endblock %}
 {% block actions %}
 <a href="/backtest" class="btn btn-ghost"><i class="bi bi-play-circle me-1"></i> New backtest</a>
-<a href="/agents" class="btn btn-accent"><i class="bi bi-robot me-1"></i> Open agents</a>
+<a href="/agents" class="btn btn-accent"><i class="bi bi-currency-bitcoin me-1"></i> Crypto agents</a>
+<a href="/stocks/agents" class="btn btn-accent"><i class="bi bi-building me-1"></i> Stock agents</a>
 {% endblock %}
 
 {% block content %}
@@ -24,34 +25,32 @@
 <div class="small muted mb-3 d-none" id="market-error"><i class="bi bi-wifi-off me-1"></i>Live prices are unavailable right now.</div>
 
 <div class="row g-3">
-    <div class="col-xl-7">
-        <div class="o-card h-100">
+    {% for key, label, href, icon in [('crypto', 'Crypto agents', '/agents', 'bi-currency-bitcoin'), ('stocks', 'Stock agents', '/stocks/agents', 'bi-building')] %}
+    <div class="col-md-6 col-xl-4">
+        <div class="o-card h-100" id="{{ key }}-card">
             <div class="o-card-head">
-                <h2 class="o-card-title"><i class="bi bi-robot me-1"></i> Agents</h2>
-                <span class="o-pill" id="agent-status"><span class="dot"></span>stopped</span>
+                <h2 class="o-card-title"><i class="bi {{ icon }} me-1"></i> {{ label }}</h2>
+                <span class="o-pill" id="{{ key }}-status"><span class="dot"></span>stopped</span>
             </div>
-            <div class="d-flex flex-wrap align-items-end justify-content-between gap-3">
-                <div>
-                    <div class="small text-2">Paper balance</div>
-                    <div class="o-big num o-skel" id="agent-balance">–</div>
-                    <div class="small num" id="agent-pnl"></div>
-                </div>
-                <div class="flex-grow-1" style="min-width: 220px; max-width: 420px" id="agent-spark"><div class="o-skel w-100" style="height:70px"></div></div>
+            <div class="small text-2">Paper balance</div>
+            <div class="o-big num o-skel" id="{{ key }}-balance">–</div>
+            <div class="small num" id="{{ key }}-pnl"></div>
+            <div class="mt-2" id="{{ key }}-spark"><div class="o-skel w-100" style="height:60px"></div></div>
+            <div class="row g-2 mt-2">
+                <div class="col-6"><div class="o-stat"><div class="label">Win rate</div><div class="value num o-skel" id="{{ key }}-winrate">–</div><div class="hint" id="{{ key }}-closes"></div></div></div>
+                <div class="col-6"><div class="o-stat"><div class="label">Profit factor</div><div class="value num o-skel" id="{{ key }}-pf">–</div><div class="hint">wins ÷ losses</div></div></div>
+                <div class="col-6"><div class="o-stat"><div class="label">Max drawdown</div><div class="value num o-skel" id="{{ key }}-dd">–</div></div></div>
+                <div class="col-6"><div class="o-stat"><div class="label">Open positions</div><div class="value num o-skel" id="{{ key }}-open">–</div></div></div>
             </div>
-            <div class="row g-2 mt-3">
-                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Win rate</div><div class="value num o-skel" id="agent-winrate">–</div><div class="hint" id="agent-closes"></div></div></div>
-                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Profit factor</div><div class="value num o-skel" id="agent-pf">–</div><div class="hint">wins ÷ losses</div></div></div>
-                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Max drawdown</div><div class="value num o-skel" id="agent-dd">–</div></div></div>
-                <div class="col-6 col-md-3"><div class="o-stat"><div class="label">Open positions</div><div class="value num o-skel" id="agent-open">–</div></div></div>
-            </div>
-            <div class="mt-auto pt-3 d-flex justify-content-between align-items-center">
-                <span class="small muted" id="agent-last"></span>
-                <a href="/agents" class="small fw-semibold text-decoration-none">Dashboard <i class="bi bi-arrow-right"></i></a>
+            <div class="mt-auto pt-3 d-flex justify-content-between align-items-center gap-2">
+                <span class="small muted" id="{{ key }}-last"></span>
+                <a href="{{ href }}" class="small fw-semibold text-decoration-none text-nowrap">Dashboard <i class="bi bi-arrow-right"></i></a>
             </div>
         </div>
     </div>
+    {% endfor %}
 
-    <div class="col-xl-5">
+    <div class="col-xl-4">
         <div class="o-card h-100">
             <div class="o-card-head">
                 <h2 class="o-card-title"><i class="bi bi-graph-up-arrow me-1"></i> Last backtest</h2>
@@ -104,11 +103,13 @@ async function loadMarket(quiet = false) {
     }
 }
 
-async function loadAgents(quiet = false) {
-    const s = await O.getJSON('/api/agents/state', {quiet});
+async function loadAgents(quiet = false, key = 'crypto') {
+    const s = await O.getJSON(key === 'stocks' ? '/api/stocks/agents/state' : '/api/agents/state', {quiet});
     const st = s.stats;
+    const $ = id => document.getElementById(`${key}-${id.replace('agent-', '')}`);
     $('agent-status').className = 'o-pill' + (s.running ? ' live' : '');
-    $('agent-status').innerHTML = `<span class="dot"></span>${s.running ? 'running' : 'stopped'} · paper`;
+    const closed = s.session && !s.session.open;
+    $('agent-status').innerHTML = `<span class="dot"></span>${s.running ? (closed ? 'market closed' : 'running') : 'stopped'} · paper`;
     O.tween($('agent-balance'), s.balance, v => O.money(v));
     const pnl = s.balance - s.start_balance;
     $('agent-pnl').innerHTML = `<span class="${O.cls(pnl)} fw-semibold">${O.signed(pnl)}</span>
@@ -121,8 +122,13 @@ async function loadAgents(quiet = false) {
     const last = s.calls[0];
     $('agent-last').textContent = last ? `Last call ${O.date(last.time)}: ${last.agent} ${last.action.toLowerCase()}` : 'Press Start on the dashboard to begin';
     O.lineChart($('agent-spark'), [{name: 'Balance', color: 'var(--o-accent)',
-        points: s.equity_curve.map(p => ({t: p.time, v: p.value}))}], {height: 70, spark: true, empty: '<span class="small">curve fills in as agents run</span>'});
+        points: s.equity_curve.map(p => ({t: p.time, v: p.value}))}], {height: 60, spark: true, empty: '<span class="small">curve fills in as agents run</span>'});
     O.ready($('agent-balance').closest('.o-card'));
+}
+
+function loadAllAgents(quiet = false) {
+    loadAgents(quiet, 'crypto');
+    loadAgents(quiet, 'stocks');
 }
 
 async function loadBacktest() {
@@ -130,7 +136,7 @@ async function loadBacktest() {
     if (!r) return;
     const st = r.stats;
     $('backtest-body').innerHTML = `
-        <div class="fw-semibold">${O.esc(r.strategy)}</div>
+        <div class="fw-semibold">${O.esc(r.strategy)} <span class="tag ${r.market === 'stocks' ? 'tag-WAIT' : 'tag-PASS'}">${r.market === 'stocks' ? 'STOCKS' : 'CRYPTO'}</span></div>
         <div class="small text-2 mb-3">${O.esc(r.pair)} · ${O.day(r.start)} to ${O.day(r.end)}</div>
         <div class="row g-2">
             <div class="col-6"><div class="o-stat"><div class="label">Return</div><div class="value num ${O.cls(st.total_return)}">${O.signedPct(st.total_return)}</div>
@@ -159,8 +165,8 @@ async function loadPicks() {
     }
 }
 
-loadMarket(); loadAgents(); loadBacktest(); loadPicks();
-setInterval(() => loadAgents(true), 15000);
+loadMarket(); loadAllAgents(); loadBacktest(); loadPicks();
+setInterval(() => loadAllAgents(true), 15000);
 setInterval(() => loadMarket(true), 30000);
 </script>
 {% endblock %}

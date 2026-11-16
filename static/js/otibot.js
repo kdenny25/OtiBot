@@ -200,7 +200,7 @@ O.lineChart = (el, series, opts = {}) => {
  *   opts: {trade (index into d.trades), onSelect(index), height}
  */
 O.RULE_TAGS = {'take profit': 'TP', 'stop loss': 'SL', 'trailing stop': 'TRAIL',
-               'went nowhere': 'STALE', 'time limit': 'TIME', 'end of test': 'END'};
+               'went nowhere': 'STALE', 'time limit': 'TIME', 'end of test': 'END', 'market close': 'CLOSE'};
 O.candleChart = (el, d, opts = {}) => {
     el.classList.add('o-chart');
     const sel = opts.trade ?? d.trades.length - 1;

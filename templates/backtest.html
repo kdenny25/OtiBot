@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% block title %}Backtest{% endblock %}
-{% block page_title %}Backtest{% endblock %}
-{% block page_sub %}See how a strategy would have traded past candles, after fees and slippage.{% endblock %}
+{% block page_title %}{{ m.title }} backtest{% endblock %}
+{% block page_sub %}See how a strategy would have traded past {{ 'stock' if m.key == 'stocks' else 'crypto' }} candles, after fees and slippage.{% endblock %}
 
 {% block content %}
 <div class="row g-3">
@@ -14,23 +14,23 @@
 
             <div class="o-section">Data</div>
             <div class="btn-group w-100 mb-2" role="group">
-                {% for key, label in sources.items() %}
-                <input type="radio" class="btn-check" name="source" value="{{ key }}" id="src-{{ key }}" {{ 'checked' if key == 'kraken' }}>
-                <label class="btn btn-seg btn-sm" for="src-{{ key }}" title="{{ label }}">{{ {'database': 'Database', 'kraken': 'Kraken', 'sample': 'Sample'}[key] }}</label>
+                {% for key, label in m.sources.items() %}
+                <input type="radio" class="btn-check" name="source" value="{{ key }}" id="src-{{ key }}" {{ 'checked' if key == m.default_source }}>
+                <label class="btn btn-seg btn-sm" for="src-{{ key }}" title="{{ label }}">{{ {'database': 'Database', 'kraken': 'Kraken', 'sample': 'Sample', 'yahoo': 'Yahoo Finance'}[key] }}</label>
                 {% endfor %}
             </div>
             <div class="small muted mb-2" id="source-hint"></div>
             <div class="row g-2">
                 <div class="col-7">
-                    <label class="form-label">Pair</label>
-                    <input class="form-control" name="pair" list="pairs" value="ETHUSD">
-                    <datalist id="pairs">{% for p in pairs %}<option value="{{ p }}">{% endfor %}</datalist>
+                    <label class="form-label">{{ m.noun }}</label>
+                    <input class="form-control" name="pair" list="pairs" value="{{ m.pair }}">
+                    <datalist id="pairs">{% for p in m.pairs %}<option value="{{ p }}">{% endfor %}</datalist>
                 </div>
                 <div class="col-5">
                     <label class="form-label">Candles</label>
                     <select class="form-select" name="interval">
-                        {% for i in intervals %}
-                        <option value="{{ i }}" {{ 'selected' if i == 15 }}>{{ i ~ 'm' if i < 60 else (i // 60) ~ 'h' if i < 1440 else '1d' }}</option>
+                        {% for i in m.intervals %}
+                        <option value="{{ i }}" {{ 'selected' if i == m.interval }}>{{ i ~ 'm' if i < 60 else (i // 60) ~ 'h' if i < 1440 else '1d' }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -45,9 +45,9 @@
                 <div class="col-12"><label class="form-label">Starting capital ($)</label>
                     <input class="form-control" type="number" name="capital" value="10000" min="100" step="100"></div>
                 <div class="col-6"><label class="form-label">Fee per fill %</label>
-                    <input class="form-control" type="number" name="fee" value="0.26" min="0" step="0.01"></div>
+                    <input class="form-control" type="number" name="fee" value="{{ m.fee }}" min="0" step="0.01"></div>
                 <div class="col-6"><label class="form-label">Slippage %</label>
-                    <input class="form-control" type="number" name="slippage" value="0.05" min="0" step="0.01"></div>
+                    <input class="form-control" type="number" name="slippage" value="{{ m.slippage }}" min="0" step="0.01"></div>
             </div>
             <div class="form-check form-switch mt-3">
                 <input class="form-check-input" type="checkbox" name="allow_short" id="allow-short">
@@ -132,11 +132,15 @@ const SOURCE_HINTS = {
     kraken: 'Pulls the most recent 720 candles from Kraken. No setup needed.',
     database: 'Reads candles you collected into Postgres. Pick a date range.',
     sample: 'A small offline ETH sample (Sep to Oct 2019), handy for trying things out.',
+    yahoo: 'Regular market hours only. Yahoo keeps 60 days of 5 and 15 minute candles and 2 years of hourly. Leave the dates for the most it has.',
 };
+const MARKET = '{{ m.key }}';
 
 function iso(d) { return d.toISOString().slice(0, 10); }
 form.end.value = iso(new Date());
 form.start.value = iso(new Date(Date.now() - 90 * 864e5));
+// Yahoo: blank dates fetch all the history it keeps at that candle size
+if (MARKET === 'stocks') form.start.value = form.end.value = '';
 
 function showParams() {
     const s = strategies.find(s => s.key === form.strategy.value);
@@ -149,7 +153,7 @@ function showParams() {
 function showSource() {
     const source = form.source.value;
     $('source-hint').textContent = SOURCE_HINTS[source];
-    $('dates').classList.toggle('d-none', source !== 'database');
+    $('dates').classList.toggle('d-none', source !== 'database' && source !== 'yahoo');
     form.pair.disabled = form.interval.disabled = source === 'sample';
 }
 
@@ -205,7 +209,7 @@ form.addEventListener('submit', async e => {
     const params = {};
     form.querySelectorAll('[data-param]').forEach(i => params[i.dataset.param] = Number(i.value));
     const body = {
-        strategy: form.strategy.value, params, source: form.source.value,
+        strategy: form.strategy.value, params, source: form.source.value, market: MARKET,
         pair: form.pair.value.trim().toUpperCase(), interval: Number(form.interval.value),
         start: form.start.value, end: form.end.value,
         capital: Number(form.capital.value), fee: Number(form.fee.value) / 100,

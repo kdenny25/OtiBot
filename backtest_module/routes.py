@@ -17,6 +17,43 @@ PAIRS = ['ETHUSD', 'BTCUSD', 'SOLUSD', 'XRPUSD', 'DOGEUSD']
 INTERVALS = [1, 5, 15, 60, 240, 1440]
 MAX_POINTS = 600
 
+# the stocks section of the same page. Stocks trade 6.5 hours on about 252
+# days a year, so a year has far fewer candles than crypto's 24/7.
+STOCK_SOURCES = {'yahoo': 'Yahoo Finance'}
+STOCK_PAIRS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'META', 'GOOGL', 'AMD']
+STOCK_INTERVALS = [5, 15, 60, 1440]
+# the most history Yahoo serves at each candle size
+YAHOO_PERIODS = {5: '60d', 15: '60d', 60: '730d', 1440: 'max'}
+MARKET = {
+    'crypto': {'key': 'crypto', 'label': 'Crypto', 'title': 'Crypto', 'page': '/backtest', 'sources': SOURCES, 'default_source': 'kraken',
+               'pairs': PAIRS, 'pair': 'ETHUSD', 'intervals': INTERVALS, 'interval': 15, 'fee': 0.26,
+               'slippage': 0.05, 'noun': 'Pair'},
+    'stocks': {'key': 'stocks', 'label': 'Stocks', 'title': 'Stock', 'page': '/stocks/backtest', 'sources': STOCK_SOURCES,
+               'default_source': 'yahoo', 'pairs': STOCK_PAIRS, 'pair': 'SPY', 'intervals': STOCK_INTERVALS,
+               'interval': 60, 'fee': 0.0, 'slippage': 0.02, 'noun': 'Ticker'},
+}
+
+
+def periods_per_year(market, interval):
+    if market == 'stocks':
+        return 252 if interval >= 1440 else int(252 * 390 / interval)
+    return int(365 * 24 * 60 / interval)
+
+
+def yahoo_candles(symbol, interval, start=None, end=None):
+    """ Regular hours candles from Yahoo Finance, naive UTC times. """
+    import yfinance as yf
+    from agent_module.stock_market import _frame
+    if interval not in YAHOO_PERIODS:
+        raise ValueError(f'Yahoo has no {interval} minute candles, pick one of {list(YAHOO_PERIODS)}')
+    kwargs = {'start': start, 'end': end} if start and end else {'period': YAHOO_PERIODS[interval]}
+    raw = yf.download(symbol, interval='1d' if interval == 1440 else f'{interval}m', prepost=False,
+                      progress=False, auto_adjust=True, multi_level_index=False, **kwargs)
+    df = _frame(raw, symbol)
+    if df.empty:
+        raise ValueError(f'Yahoo Finance has no {symbol} candles at that size and dates')
+    return df
+
 # last run summary for the home page
 last_run = {}
 
@@ -43,6 +80,8 @@ def load_candles(source, pair, interval, start=None, end=None):
     elif source == 'kraken':
         from agent_module.market import KrakenMarket
         df = KrakenMarket().candles(pair, interval)
+    elif source == 'yahoo':
+        df = yahoo_candles(pair, interval, start, end)
     else:
         raise ValueError(f'Unknown data source {source}')
 
@@ -81,7 +120,8 @@ def run_backtest(options, candles=None):
     bt = backtest(capital=capital, allow_short=bool(options.get('allow_short')),
                   slippage=float(options.get('slippage', 0.0005)))
     bt.set_fees(float(options.get('fee', 0.0026)))
-    bt.periods_per_year = int(365 * 24 * 60 / interval)
+    market = options.get('market', 'crypto')
+    bt.periods_per_year = periods_per_year(market, interval)
     bt.set_data(candles)
     bt.set_strategy(build(key, options.get('params')))
     result = bt.run()
@@ -121,7 +161,7 @@ def run_backtest(options, candles=None):
         'windows': windows,
     }
     last_run.clear()
-    last_run.update({'strategy': response['strategy'], 'pair': options.get('pair', 'ETHUSD'),
+    last_run.update({'strategy': response['strategy'], 'pair': options.get('pair', 'ETHUSD'), 'market': market,
                      'source': options.get('source', 'sample'), 'start': response['start'],
                      'end': response['end'], 'stats': stats})
     return response
@@ -129,7 +169,12 @@ def run_backtest(options, candles=None):
 
 @backtest_bp.route('/backtest')
 def backtest_page():
-    return render_template('backtest.html', sources=SOURCES, pairs=PAIRS, intervals=INTERVALS)
+    return render_template('backtest.html', m=MARKET['crypto'])
+
+
+@backtest_bp.route('/stocks/backtest')
+def stock_backtest_page():
+    return render_template('backtest.html', m=MARKET['stocks'])
 
 
 @backtest_bp.route('/api/backtest/strategies')
